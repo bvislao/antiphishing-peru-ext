@@ -23,22 +23,6 @@ Muestra **alertas** en página (banner + sonido), marca el ícono con **badge** 
 
 ---
 
-## 📦 Estructura del proyecto
-
-anti-phishing-pe/
-├─ manifest.json
-├─ background.js
-├─ content.js
-├─ popup.html
-├─ popup.js
-├─ options.html
-├─ options.js
-└─ whitelist.js
-
----
-
----
-
 ## 🚀 Instalación (modo desarrollador)
 
 1. Descarga/clona este repositorio.  
