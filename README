@@ -1,0 +1,136 @@
+# Anti-Phishing Perú (Bancos & Financieras) — Chrome Extension
+
+Detecta señales de **phishing** en sitios que imitan a bancos y financieras del Perú.  
+Muestra **alertas** en página (banner + sonido), marca el ícono con **badge** (verde/ámbar/rojo), y ofrece un **Modo Estricto** que **bloquea temporalmente** la escritura en campos sensibles (tarjeta, CVV, vencimiento, CCI, y opcionalmente DNI) cuando el dominio **no** es oficial.
+
+> Repo: <https://github.com/bvislao/antiphishing-peru-ext>  
+> Autor: [bvislao.me](https://bvislao.me) · ☕ <https://www.buymeacoffee.com/bvislao>
+
+---
+
+## ✨ Características
+
+- ✅ **Heurísticas locales** (sin enviar tus datos):  
+  - Conexión **HTTPS**  
+  - **Punycode** / homógrafos  
+  - Dominios **look-alike** (distancia a lista de oficiales)  
+  - Formularios que envían a **otro dominio** o **sin HTTPS**  
+  - **Campos sensibles** detectados por labels/patrones: **DNI**, **Tarjeta**, **CVV/CVC**, **Fecha de vencimiento**, **CCI**  
+- 🛡️ **Modo Estricto**: bloquea inputs sensibles en dominios no oficiales; botón para **desbloquear 60s**.  
+- 🧰 **Lista blanca** editable (eTLD+1) para bancos/financieras del Perú.  
+- 🔔 **Alertas**: banner en la página, beep, badge en el action button y notificación en riesgo **ALTO**.  
+- 🧪 Integración **opcional** con **Google Safe Browsing** (stub incluido).
+
+---
+
+## 📦 Estructura del proyecto
+
+anti-phishing-pe/
+├─ manifest.json
+├─ background.js
+├─ content.js
+├─ popup.html
+├─ popup.js
+├─ options.html
+├─ options.js
+└─ whitelist.js
+
+---
+
+---
+
+## 🚀 Instalación (modo desarrollador)
+
+1. Descarga/clona este repositorio.  
+2. Abre `chrome://extensions` y activa **Developer mode**.  
+3. Clic en **Load unpacked** → selecciona la carpeta del proyecto.  
+4. Abre cualquier sitio y observa el **badge** del ícono (vacío / `!` / `!!`).  
+5. Si hay riesgo **MEDIO** o **ALTO**, verás un **banner** y escucharás un **beep**.  
+6. En **Options**, edita la **lista de dominios confiables** y el **Modo Estricto**.
+
+---
+
+## ⚙️ Configuración
+
+### Lista de dominios confiables (eTLD+1)
+- Abre **Options** y agrega, uno por línea, los dominios oficiales (ej: `bcp.com.pe`, `bbva.pe`, `scotiabank.com.pe`).
+- La detección de “look-alike” usa distancia sobre eTLD+1 y ajusta el nivel de riesgo.
+
+### Modo Estricto
+- Activa/desactiva el **bloqueo temporal** de inputs sensibles en dominios **no** oficiales.
+- Selecciona qué **tipos de datos** bloquear: `card`, `cvv`, `expiry`, `cci` y opcionalmente `dni`.
+- En página aparece una **píldora** “Desbloquear 60s” para permitir la escritura temporalmente.
+
+### Safe Browsing (opcional)
+- El proyecto incluye un **stub** para consultar **Google Safe Browsing**.  
+- Si decides habilitarlo, necesitas una **API Key** y declarar en la **Política de Privacidad** que ciertas URLs pueden ser verificadas contra la API.
+
+---
+
+## 🔐 Permisos y privacidad
+
+**Permisos**:
+- `storage`: guarda configuración (lista de dominios y modo estricto).  
+- `tabs`, `activeTab`: lee URL de la pestaña activa para evaluar.  
+- `webNavigation`: reaccionar a cambios de navegación.  
+- `notifications`: mostrar alerta cuando el riesgo es **ALTO**.  
+- `host_permissions: "<all_urls>"`: analizar pistas de phishing en cualquier sitio.
+
+**Privacidad**:
+- El análisis es **local**; no recolectamos datos personales ni historial.  
+
+---
+
+## 🧪 Señales de detección (resumen)
+
+- 🔒 HTTPS ausente  
+- 🔤 Punycode/homógrafos (`xn--`)  
+- 🧬 Look-alike de dominios oficiales (distancia Levenshtein)  
+- 📤 Formularios que envían a otro dominio o sin HTTPS  
+- 🪪 **DNI** (8 dígitos / labels asociados)  
+- 🏦 **CCI** (20 dígitos / labels)  
+- 💳 **Tarjeta** (patrones + Luhn)  
+- 🔐 **CVV/CVC** (3–4 dígitos / labels)  
+- 📆 **Vencimiento** (`MM/YY` o `MM/YYYY` / labels)  
+
+> Estas señales **aumentan el riesgo** cuando el dominio **no** está en la lista oficial.
+
+---
+
+## 🖼️ Capturas (sugerencias)
+
+Incluye en la carpeta `/docs` o en el repo:
+- `docs/screenshot-popup.png` — Popup con estado y razones.  
+- `docs/screenshot-options.png` — Options con lista y modo estricto.  
+- `docs/screenshot-banner.png` — Banner de alerta.  
+- `docs/screenshot-pill.png` — Píldora “Desbloquear 60s”.
+
+## 🤝 Contribuir
+
+¡Los PR son bienvenidos!  
+1. Haz un fork y crea una rama: `feat/mi-mejora`.  
+2. Aplica cambios y agrega pruebas/manual de verificación si corresponde.  
+3. Ejecuta una revisión manual en `chrome://extensions`.  
+4. Abre un **Pull Request** describiendo el cambio y capturas.
+
+
+---
+
+## 📄 Licencia
+
+**MIT License Apache 2.0**.  
+
+---
+
+## 🙌 Agradecimientos & Sponsor
+
+Si este proyecto te ayuda, puedes **invitarme un café** ☕  
+**BuyMeACoffee:** <https://www.buymeacoffee.com/bvislao>
+
+---
+
+## 📫 Contacto
+
+- Web: <https://bvislao.me>  
+- Repo: <https://github.com/bvislao/antiphishing-peru-ext>  
+- Issues: <https://github.com/bvislao/antiphishing-peru-ext/issues>

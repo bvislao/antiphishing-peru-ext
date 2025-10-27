@@ -1,0 +1,245 @@
+(function () {
+  const url = location.href;
+  let strictUnlockUntil = 0;
+  let lastStrictKinds = [];
+
+  const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/\p{Diacritic}/gu, "");
+  const isNumLike = (el) => ["tel","number","text","password","search"].includes(el.type || "") || !el.type;
+
+  function labelTextFor(input) {
+    if (input.id) {
+      const byFor = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+      if (byFor && byFor.textContent) return byFor.textContent.trim();
+    }
+    const parentLabel = input.closest("label");
+    if (parentLabel && parentLabel.textContent) return parentLabel.textContent.trim();
+    const prev = input.previousElementSibling;
+    if (prev && prev.textContent && prev.textContent.length < 80) return prev.textContent.trim();
+    return input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.name || input.id || "";
+  }
+
+  function luhnValid(num) {
+    const s = (num || "").replace(/\D/g, "");
+    if (s.length < 13 || s.length > 19) return false;
+    let sum = 0, dbl = false;
+    for (let i = s.length - 1; i >= 0; i--) {
+      let d = parseInt(s[i], 10);
+      if (dbl) { d *= 2; if (d > 9) d -= 9; }
+      sum += d; dbl = !dbl;
+    }
+    return (sum % 10) === 0;
+  }
+
+  function classifySensitiveByText(txt, input) {
+    const t = norm(txt);
+    if (/\bdni\b/.test(t) || /documento( de)? identidad|nro(\.|) doc|num(\.|) doc/.test(t)) return "dni";
+    if (/tarjeta|card( number|)|numero de tarjeta|nro tarjeta|pan\b/.test(t)) return "card";
+    if (/\bcci\b|cuenta interbancaria/.test(t)) return "cci";
+    if (/vencimiento|expiraci[oó]n|mm\s*\/\s*(aa|yy|aaaa|yyyy)|fecha de exp/.test(t)) return "expiry";
+    if (/\bcvv\b|\bcvc\b|codigo de seguridad|cod\.?\s*seguridad/.test(t)) return "cvv";
+
+    const max = parseInt(input.getAttribute("maxlength") || "0", 10);
+    const pattern = input.getAttribute("pattern") || "";
+    const nameId = norm((input.name || "") + " " + (input.id || ""));
+
+    if ((/dni\b/.test(nameId) || (max === 8 && isNumLike(input)))) return "dni";
+    if (/cci\b|cuenta\s*interbancaria/.test(nameId) || max === 20) return "cci";
+    if (/mm.*yy|mm.*aaaa|mm\/yy|mm\/\d{2,4}/i.test(pattern) || /exp|venc/.test(nameId)) return "expiry";
+    if (/cvv|cvc|seguridad/.test(nameId) || max === 3 || max === 4) return "cvv";
+    if (/card|tarjeta|pan/.test(nameId) || (isNumLike(input) && (max >= 15 && max <= 19))) return "card";
+    return null;
+  }
+
+  function scanSensitiveFields() {
+    const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
+    const counts = { dni:0, card:0, cci:0, expiry:0, cvv:0 };
+    const details = [];
+
+    for (const el of inputs) {
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) continue;
+      const t = (el.type || "").toLowerCase();
+      if (el.disabled || el.readOnly) continue;
+      if (el instanceof HTMLInputElement && ["hidden","submit","button","image","checkbox","radio","file","range","color","reset"].includes(t)) continue;
+
+      const lbl = labelTextFor(el);
+      let kind = classifySensitiveByText(lbl, el);
+
+      // valor actual
+      const v = (el.value || "").replace(/\s/g, "");
+      if (!kind) {
+        if (/\d{8}/.test(v) && v.replace(/\D/g,"").length === 8) kind = "dni";
+        if (/\d{20}/.test(v) && v.replace(/\D/g,"").length === 20) kind = "cci";
+        if (/\d{2}\s*\/\s*\d{2,4}/.test(v)) kind = "expiry";
+        if (/\d{13,19}/.test(v) && luhnValid(v)) kind = "card";
+        if (/^\d{3,4}$/.test(v) && /cvv|cvc|seguridad/i.test(lbl)) kind = "cvv";
+      }
+
+      if (kind) {
+        counts[kind]++; 
+        details.push({ type: kind, name: el.name || "", id: el.id || "", label: lbl.slice(0, 80) });
+      }
+    }
+    return { counts, details };
+  }
+
+  function collectPageHints() {
+    const forms = Array.from(document.forms || []).map(f => f.getAttribute("action") || "");
+    const hasPasswordFields = !!document.querySelector('input[type="password"]');
+    const s = scanSensitiveFields();
+    const sensitive = { dni:s.counts.dni, card:s.counts.card, cci:s.counts.cci, expiry:s.counts.expiry, cvv:s.counts.cvv, _details:s.details };
+    return { forms, hasPasswordFields, sensitive };
+  }
+
+  function send() {
+    chrome.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
+      if (!res || res.type !== "RISK_RESULT") return;
+      const { level, reasons, strict } = res.payload;
+      if (level === "MEDIO" || level === "ALTO") {
+        showBanner(level, reasons);
+        beep(level);
+      }
+      if (strict?.enforce) {
+        lastStrictKinds = strict.blockKinds || [];
+        applyStrictLock(lastStrictKinds);
+      }
+    });
+  }
+
+  // Aplicar/retirar bloqueo estricto
+  function applyStrictLock(blockKinds) {
+    if (Date.now() < strictUnlockUntil) return; // desbloqueado temporalmente
+    const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
+    for (const el of inputs) {
+      const t = (el.type || "").toLowerCase();
+      if (el instanceof HTMLInputElement && ["hidden","submit","button","image","checkbox","radio","file","range","color","reset"].includes(t)) continue;
+
+      const lbl = labelTextFor(el);
+      const kind = classifySensitiveByText(lbl, el);
+      if (!kind || !blockKinds.includes(kind)) continue;
+
+      // marca y bloquea
+      if (!el.dataset.apStrict) {
+        el.dataset.apStrict = "1";
+        el.dataset.apPrevPlaceholder = el.getAttribute("placeholder") || "";
+        el.setAttribute("placeholder", "⚠ protegido por Anti-Phishing");
+        el.style.outline = "2px dashed #E74C3C";
+        el.style.background = "#fff6f6";
+
+        // evita escritura
+        const handler = (ev) => {
+          if (Date.now() < strictUnlockUntil) return;
+          ev.preventDefault();
+          showStrictPill();
+        };
+        el.addEventListener("keydown", handler, true);
+        el.addEventListener("beforeinput", handler, true);
+        el.addEventListener("paste", handler, true);
+        el.dataset.apHandler = "1";
+      }
+    }
+    showStrictPill();
+    // observar nuevos nodos (SPAs)
+    ensureObserver(blockKinds);
+  }
+
+  let mo = null;
+  function ensureObserver(blockKinds){
+    if (mo) return;
+    mo = new MutationObserver(() => applyStrictLock(blockKinds));
+    mo.observe(document.documentElement, { childList:true, subtree:true });
+  }
+
+  function clearStrictLock(){
+    const locked = document.querySelectorAll("[data-ap-strict='1']");
+    locked.forEach(el=>{
+      el.removeAttribute("data-ap-strict");
+      if (el.dataset.apPrevPlaceholder !== undefined) el.setAttribute("placeholder", el.dataset.apPrevPlaceholder);
+      el.style.outline = "";
+      el.style.background = "";
+      // los listeners se mantienen inofensivos pues chequean strictUnlockUntil
+    });
+    hideStrictPill();
+  }
+
+  // UI de pill para desbloquear 60s
+  function showStrictPill(){
+    if (Date.now() < strictUnlockUntil) { hideStrictPill(); return; }
+    if (document.getElementById("__ap_strict_pill")) return;
+    const pill = document.createElement("div");
+    pill.id = "__ap_strict_pill";
+    pill.textContent = "⚠ Protección activa — Desbloquear 60s";
+    Object.assign(pill.style, {
+      position:"fixed", right:"16px", bottom:"16px", zIndex:2147483647,
+      background:"#ffd6d6", border:"1px solid #ff6b6b", color:"#7a0000",
+      padding:"10px 12px", borderRadius:"999px", fontFamily:"system-ui,-apple-system,Segoe UI,Roboto,Arial",
+      fontWeight:"700", cursor:"pointer", boxShadow:"0 8px 24px rgba(0,0,0,.2)"
+    });
+    pill.onclick = () => {
+      strictUnlockUntil = Date.now() + 60_000;
+      pill.textContent = "✅ Desbloqueado por 60s";
+      pill.style.background = "#e7f7e7"; pill.style.color = "#116611"; pill.style.border = "1px solid #3cb371";
+      setTimeout(() => { clearStrictLock(); }, 50); // quita estilos
+      setTimeout(() => { strictUnlockUntil = 0; applyStrictLock(lastStrictKinds); }, 60_000);
+      setTimeout(() => { hideStrictPill(); }, 2000);
+    };
+    document.documentElement.appendChild(pill);
+  }
+  function hideStrictPill(){
+    const pill = document.getElementById("__ap_strict_pill");
+    if (pill) pill.remove();
+  }
+
+  // Banner + sonido (como antes)
+  function showBanner(level, reasons) {
+    if (document.getElementById("__anti_phishing_banner")) return;
+    const wrap = document.createElement("div");
+    wrap.id = "__anti_phishing_banner";
+    wrap.style.position = "fixed";
+    wrap.style.zIndex = 2147483647;
+    wrap.style.left = "16px"; wrap.style.right = "16px"; wrap.style.top = "16px";
+    wrap.style.padding = "12px 16px"; wrap.style.borderRadius = "12px";
+    wrap.style.boxShadow = "0 8px 24px rgba(0,0,0,.2)";
+    wrap.style.fontFamily = "system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    wrap.style.color = "#111";
+    wrap.style.background = level === "ALTO" ? "#ffd1d1" : "#ffe8b3";
+    wrap.style.border = level === "ALTO" ? "1px solid #ff6b6b" : "1px solid #ffb84d";
+
+    const title = document.createElement("div");
+    title.style.fontWeight = "700"; title.style.marginBottom = "6px";
+    title.textContent = level === "ALTO" ? "⚠️ Posible PHISHING (datos sensibles)" : "⚠️ Riesgo potencial";
+
+    const list = document.createElement("ul");
+    list.style.margin = "0"; list.style.paddingInlineStart = "18px";
+    (reasons || []).slice(0, 3).forEach(r => { const li = document.createElement("li"); li.textContent = r; list.appendChild(li); });
+
+    const row = document.createElement("div");
+    row.style.display = "flex"; row.style.gap = "8px"; row.style.marginTop = "10px";
+    const btnMore = document.createElement("button"); btnMore.textContent = "Más info"; Object.assign(btnMore.style, baseBtn());
+    const btnClose = document.createElement("button"); btnClose.textContent = "Cerrar"; Object.assign(btnClose.style, baseBtn());
+    btnMore.onclick = () => alert("Se detectaron campos sensibles (DNI/Tarjeta/CCI/Fecha/CVV). Verifica el dominio y evita ingresar datos si no es el sitio oficial.");
+    btnClose.onclick = () => wrap.remove();
+
+    row.appendChild(btnMore); row.appendChild(btnClose);
+    wrap.appendChild(title); wrap.appendChild(list); wrap.appendChild(row);
+    document.documentElement.appendChild(wrap);
+  }
+
+  function baseBtn() {
+    return { border:"1px solid #bbb", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", background:"#fff", fontWeight:"600" };
+  }
+  function beep(level) {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = level === "ALTO" ? 980 : 700; g.gain.value = 0.035;
+      o.connect(g); g.connect(ctx.destination); o.start();
+      setTimeout(()=>{ o.stop(); ctx.close(); }, level === "ALTO" ? 450 : 280);
+    } catch {}
+  }
+
+  // Ejecuta
+  try { send(); } catch {}
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => send());
+  else send();
+  setTimeout(() => { try { send(); } catch {} }, 1200);
+})();
