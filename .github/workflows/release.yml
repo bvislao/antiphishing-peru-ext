@@ -1,0 +1,116 @@
+name: release-browser-zips
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión a release (ej: v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || inputs.version }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip jq coreutils
+
+      - name: Determine tag/version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [[ -z "$TAG" ]]; then
+            echo "No tag provided/detected"; exit 1
+          fi
+
+          # Sanitiza nombre para archivos
+          SAFE_TAG="${TAG#refs/tags/}"
+          echo "tag=$SAFE_TAG" >> $GITHUB_OUTPUT
+
+          # Busca sección del CHANGELOG para el body (opcional)
+          NOTES="Release $SAFE_TAG"
+          if [[ -f CHANGELOG.md ]]; then
+            awk -v tag="$SAFE_TAG" '
+              $0 ~ "^## \\[" tag "\\]" { on=1; next }
+              on && $0 ~ "^## \\[" { on=0 }
+              on { print }
+            ' CHANGELOG.md > dist_notes.txt || true
+            if [[ -s dist_notes.txt ]]; then
+              NOTES="$(printf "## %s\n\n%s" "$SAFE_TAG" "$(cat dist_notes.txt)")"
+            fi
+          fi
+          printf "%s" "$NOTES" > release-notes.md
+
+      - name: Create tag (only for manual runs)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          # Crea/actualiza tag anotado con GITHUB_TOKEN
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG ya existe localmente."
+          fi
+          git tag -a "$TAG" -m "Release $TAG" || true
+          git push origin "$TAG" || true
+
+      - name: Make build.sh executable
+        run: chmod +x ./build.sh
+
+      - name: Build ZIPs (chrome / firefox / safari-src)
+        run: ./build.sh
+
+      - name: Rename artifacts with version
+        id: rename
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          mkdir -p dist/release
+          cp dist/chrome.zip      "dist/release/anti-phishing-pe-chrome-${TAG}.zip"
+          cp dist/firefox.zip     "dist/release/anti-phishing-pe-firefox-${TAG}.zip"
+          cp dist/safari-src.zip  "dist/release/anti-phishing-pe-safari-src-${TAG}.zip"
+
+          # Checksums
+          (cd dist/release && sha256sum *.zip > checksums-${TAG}.txt)
+
+      - name: Upload build artifacts (for CI browsing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-zips-${{ steps.meta.outputs.tag }}
+          path: dist/release/*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: release-notes.md
+          files: |
+            dist/release/anti-phishing-pe-chrome-${{ steps.meta.outputs.tag }}.zip
+            dist/release/anti-phishing-pe-firefox-${{ steps.meta.outputs.tag }}.zip
+            dist/release/anti-phishing-pe-safari-src-${{ steps.meta.outputs.tag }}.zip
+            dist/release/checksums-${{ steps.meta.outputs.tag }}.txt
+          draft: false
+          prerelease: false
