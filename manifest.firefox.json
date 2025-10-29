@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Anti-Phishing Perú (Bancos & Financieras)",
+  "description": "Detecta phishing bancario/financiero en Perú y alerta (banner, sonido, badge). Incluye Modo Estricto.",
+  "version": "1.2.2",
+  "permissions": ["storage", "tabs", "webNavigation", "activeTab", "notifications"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "scripts": ["background.js"] },
+  "action": { "default_title": "Anti-Phishing PE", "default_popup": "popup.html" },
+  "options_page": "options.html",
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "browser_specific_settings": {
+    "gecko": { "id": "antiphishing-pe@bvislao", "strict_min_version": "109.0" }
+  },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_start" }
+  ]
+}

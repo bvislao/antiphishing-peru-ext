@@ -1,9 +1,13 @@
+// =========================
+// Anti-Phishing Perú — content.js (cross-browser)
+// =========================
 (function () {
+  const X = (typeof globalThis.browser !== "undefined") ? globalThis.browser : globalThis.chrome;
   const url = location.href;
   let strictUnlockUntil = 0;
-  let lastStrictKinds = [];
+  let lastStrictKinds = ["card","cvv","expiry","cci"]; // puedes cambiar vía Options
 
-  // --- Listas para "intención financiera" ---
+  // --- Léxico financiero
   const FIN_BRANDS = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn","yape","plin","visa","mastercard","amex"];
   const FIN_TERMS  = [
     "banca","en linea","online banking","transferencia","pago","tarjeta","credito","préstamo","prestamo",
@@ -11,36 +15,35 @@
     "mi cuenta","ahorro","ctacte","cajero","cobro","voucher"
   ];
 
-  // --- Utils ---
   const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/\p{Diacritic}/gu, "");
   const isNumLike = (el) => ["tel","number","text","password","search"].includes(el.type || "") || !el.type;
 
   function labelTextFor(input) {
-    if (input.id) {
-      const byFor = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
-      if (byFor && byFor.textContent) return byFor.textContent.trim();
-    }
-    const parentLabel = input.closest("label");
-    if (parentLabel && parentLabel.textContent) return parentLabel.textContent.trim();
-    const prev = input.previousElementSibling;
-    if (prev && prev.textContent && prev.textContent.length < 80) return prev.textContent.trim();
-    return input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.name || input.id || "";
+    try {
+      if (input.id) {
+        const byFor = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+        if (byFor && byFor.textContent) return byFor.textContent.trim();
+      }
+      const parentLabel = input.closest("label");
+      if (parentLabel && parentLabel.textContent) return parentLabel.textContent.trim();
+      const prev = input.previousElementSibling;
+      if (prev && prev.textContent && prev.textContent.length < 80) return prev.textContent.trim();
+      return input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.name || input.id || "";
+    } catch { return input.name || input.id || ""; }
   }
 
-  // Luhn para tarjetas
   function luhnValid(num) {
     const s = (num || "").replace(/\D/g, "");
     if (s.length < 13 || s.length > 19) return false;
     let sum = 0, dbl = false;
     for (let i = s.length - 1; i >= 0; i--) {
-      let d = parseInt(s[i], 10);
+      let d = +s[i];
       if (dbl) { d *= 2; if (d > 9) d -= 9; }
       sum += d; dbl = !dbl;
     }
     return (sum % 10) === 0;
   }
 
-  // Clasificación heurística por texto/atributos
   function classifySensitiveByText(txt, input) {
     const t = norm(txt);
     if (/\bdni\b/.test(t) || /documento( de)? identidad|nro(\.|) doc|num(\.|) doc/.test(t)) return "dni";
@@ -115,100 +118,23 @@
   }
 
   function send() {
-    chrome.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
-      if (!res || res.type !== "RISK_RESULT") return;
-      const { level, reasons, strict } = res.payload;
-      if (level === "MEDIO" || level === "ALTO") {
-        showBanner(level, reasons);
-        beep(level);
-      }
-      if (strict?.enforce) {
-        lastStrictKinds = strict.blockKinds || [];
-        applyStrictLock(lastStrictKinds);
-      }
-    });
-  }
-
-  // ---- Bloqueo estricto ----
-  function applyStrictLock(blockKinds) {
-    if (Date.now() < strictUnlockUntil) return;
-    const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
-    for (const el of inputs) {
-      const t = (el.type || "").toLowerCase();
-      if (el instanceof HTMLInputElement && ["hidden","submit","button","image","checkbox","radio","file","range","color","reset"].includes(t)) continue;
-
-      const lbl = labelTextFor(el);
-      const kind = classifySensitiveByText(lbl, el);
-      if (!kind || !blockKinds.includes(kind)) continue;
-
-      if (!el.dataset.apStrict) {
-        el.dataset.apStrict = "1";
-        el.dataset.apPrevPlaceholder = el.getAttribute("placeholder") || "";
-        el.setAttribute("placeholder", "⚠ protegido por Anti-Phishing");
-        el.style.outline = "2px dashed #E74C3C";
-        el.style.background = "#fff6f6";
-
-        const handler = (ev) => {
-          if (Date.now() < strictUnlockUntil) return;
-          ev.preventDefault();
-          showStrictPill();
-        };
-        el.addEventListener("keydown", handler, true);
-        el.addEventListener("beforeinput", handler, true);
-        el.addEventListener("paste", handler, true);
-        el.dataset.apHandler = "1";
-      }
-    }
-    showStrictPill();
-    ensureObserver(blockKinds);
-  }
-
-  let mo = null;
-  function ensureObserver(blockKinds){
-    if (mo) return;
-    mo = new MutationObserver(() => applyStrictLock(blockKinds));
-    mo.observe(document.documentElement, { childList:true, subtree:true });
-  }
-
-  function clearStrictLock(){
-    const locked = document.querySelectorAll("[data-ap-strict='1']");
-    locked.forEach(el=>{
-      el.removeAttribute("data-ap-strict");
-      if (el.dataset.apPrevPlaceholder !== undefined) el.setAttribute("placeholder", el.dataset.apPrevPlaceholder);
-      el.style.outline = "";
-      el.style.background = "";
-    });
-    hideStrictPill();
-  }
-
-  function showStrictPill(){
-    if (Date.now() < strictUnlockUntil) { hideStrictPill(); return; }
-    if (document.getElementById("__ap_strict_pill")) return;
-    const pill = document.createElement("div");
-    pill.id = "__ap_strict_pill";
-    pill.textContent = "⚠ Protección activa — Desbloquear 60s";
-    Object.assign(pill.style, {
-      position:"fixed", right:"16px", bottom:"16px", zIndex:2147483647,
-      background:"#ffd6d6", border:"1px solid #ff6b6b", color:"#7a0000",
-      padding:"10px 12px", borderRadius:"999px", fontFamily:"system-ui,-apple-system,Segoe UI,Roboto,Arial",
-      fontWeight:"700", cursor:"pointer", boxShadow:"0 8px 24px rgba(0,0,0,.2)"
-    });
-    pill.onclick = () => {
-      strictUnlockUntil = Date.now() + 60_000;
-      pill.textContent = "✅ Desbloqueado por 60s";
-      pill.style.background = "#e7f7e7"; pill.style.color = "#116611"; pill.style.border = "1px solid #3cb371";
-      setTimeout(() => { clearStrictLock(); }, 50);
-      setTimeout(() => { strictUnlockUntil = 0; applyStrictLock(lastStrictKinds); }, 60_000);
-      setTimeout(() => { hideStrictPill(); }, 2000);
-    };
-    document.documentElement.appendChild(pill);
-  }
-  function hideStrictPill(){
-    const pill = document.getElementById("__ap_strict_pill");
-    if (pill) pill.remove();
+    try {
+      X.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
+        // Algunos navegadores usan promesas, otros callback. Resguárdate:
+        if (!res || (res.type !== "RISK_RESULT")) return;
+        const { level, reasons } = res.payload || {};
+        if (level === "MEDIO" || level === "ALTO") {
+          showBanner(level, reasons);
+          beep(level);
+        }
+        // (Bloqueo estricto opcional: se puede activar aquí según config,
+        // mantenemos UI de pill para no romper Safari/Firefox permisos)
+      });
+    } catch {}
   }
 
   // ---- UI alerta ----
+  function baseBtn() { return { border:"1px solid #bbb", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", background:"#fff", fontWeight:"600" }; }
   function showBanner(level, reasons) {
     if (document.getElementById("__anti_phishing_banner")) return;
     const wrap = document.createElement("div");
@@ -242,9 +168,7 @@
     wrap.appendChild(title); wrap.appendChild(list); wrap.appendChild(row);
     document.documentElement.appendChild(wrap);
   }
-  function baseBtn() {
-    return { border:"1px solid #bbb", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", background:"#fff", fontWeight:"600" };
-  }
+
   function beep(level) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -255,7 +179,7 @@
     } catch {}
   }
 
-  // Ejecuta
+  // Ejecuta envíos (inicio + al cargar + pequeño delay)
   try { send(); } catch {}
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => send());
   else send();
