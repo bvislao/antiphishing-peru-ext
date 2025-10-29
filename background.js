@@ -1,11 +1,24 @@
 import { DEFAULT_TRUSTED_ETLD1 } from "./whitelist.js";
 
-// --- Config por defecto del modo estricto ---
+// -------- Config por defecto --------
 const DEFAULT_STRICT_MODE = true;
-const DEFAULT_STRICT_BLOCK_KINDS = ["card", "cvv", "expiry", "cci","dni"];
+const DEFAULT_STRICT_BLOCK_KINDS = ["card", "cvv", "expiry", "cci"]; // añade "dni" si quieres
+// Filtro de DNI: por defecto solo alerta fuerte si hay "contexto financiero"
+const DEFAULT_DNI_ONLY_FINANCIAL = true;
 
-// --- Utilidades dominio ---
+// -------- Listas y helpers dominio --------
 const PUBLIC_SUFFIXES_PE = new Set(["pe","com.pe","org.pe","gob.pe","edu.pe","mil.pe","net.pe"]);
+const FIN_BRANDS = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn","yape","plin","visa","mastercard","amex"];
+const FIN_TERMS  = [
+  "banca","en linea","online banking","transferencia","pago","tarjeta","credito","préstamo","prestamo",
+  "hipoteca","saldo","cci","cuenta interbancaria","token","otp","clave dinamica","clave dinámica",
+  "mi cuenta","ahorro","ctacte","cajero","cobro","voucher"
+];
+const SAFE_DNI_ETLD1 = [
+  "gob.pe","sunat.gob.pe","reniec.gob.pe","onpe.gob.pe","essalud.gob.pe",
+  "migraciones.gob.pe","minedu.gob.pe","minsa.gob.pe","pnp.gob.pe"
+];
+const SAFE_DNI_SUFFIX = [/\.gob\.pe$/i, /\.edu\.pe$/i];
 
 function getETLD1(host) {
   const parts = host.split(".").filter(Boolean);
@@ -27,8 +40,23 @@ function levenshtein(a,b){
   }
   return m[a.length][b.length];
 }
+function isSafeDniDomain(etld1) {
+  if (SAFE_DNI_ETLD1.includes(etld1)) return true;
+  return SAFE_DNI_SUFFIX.some(rx => rx.test(etld1));
+}
+function financialIntentScore({ host, path, lexical = {}, sensitive = {} }) {
+  let score = 0;
+  const hp = (host + " " + path).toLowerCase();
+  if (FIN_BRANDS.some(k => hp.includes(k))) score += 2;
+  const finHits = Number(lexical.financialHits || 0);
+  const brandHits = Number(lexical.brandHits || 0);
+  score += Math.min(4, finHits + brandHits);
+  const hasCardLike = (sensitive.card||0) + (sensitive.cci||0) + (sensitive.expiry||0) + (sensitive.cvv||0) > 0;
+  if (hasCardLike) score += 3;
+  return score;
+}
 
-// --- Storage helpers ---
+// -------- Storage helpers --------
 async function getTrustedDomains() {
   const { trustedETLD1 } = await chrome.storage.sync.get("trustedETLD1");
   if (Array.isArray(trustedETLD1) && trustedETLD1.length) return trustedETLD1;
@@ -42,8 +70,12 @@ async function getStrictSettings() {
     strictBlockKinds: Array.isArray(strictBlockKinds) && strictBlockKinds.length ? strictBlockKinds : DEFAULT_STRICT_BLOCK_KINDS
   };
 }
+async function getBehaviorSettings() {
+  const { dniOnlyFinancial } = await chrome.storage.sync.get(["dniOnlyFinancial"]);
+  return { dniOnlyFinancial: typeof dniOnlyFinancial === "boolean" ? dniOnlyFinancial : DEFAULT_DNI_ONLY_FINANCIAL };
+}
 
-// --- Evaluación de riesgo ---
+// -------- Evaluación de riesgo --------
 async function assessRisk(url, pageHints = {}) {
   const u = new URL(url);
   const host = u.hostname.toLowerCase();
@@ -51,6 +83,7 @@ async function assessRisk(url, pageHints = {}) {
   const etld1 = getETLD1(host);
   const trusted = await getTrustedDomains();
   const { strictMode, strictBlockKinds } = await getStrictSettings();
+  const { dniOnlyFinancial } = await getBehaviorSettings();
 
   let risk = 0;
   const reasons = [];
@@ -86,19 +119,37 @@ async function assessRisk(url, pageHints = {}) {
     if (badActs.length) { risk += 2; reasons.push("Formularios que envían datos a otro dominio o sin HTTPS."); }
   }
 
-  // Datos sensibles
+  // --- Datos sensibles con contexto financiero ---
   const s = pageHints.sensitive || {};
   const totalSensitive = (s.dni||0)+(s.card||0)+(s.cci||0)+(s.expiry||0)+(s.cvv||0);
+
   if (!trusted.includes(etld1) && totalSensitive > 0) {
-    const highWeight = (s.card||0)+(s.cvv||0) > 0 ? 4 : 3;
-    risk += highWeight;
-    const kinds = [];
-    if (s.dni)   kinds.push(`DNI (${s.dni})`);
-    if (s.card)  kinds.push(`Tarjeta (${s.card})`);
-    if (s.cvv)   kinds.push(`CVV (${s.cvv})`);
-    if (s.expiry)kinds.push(`Fecha de vencimiento (${s.expiry})`);
-    if (s.cci)   kinds.push(`CCI (${s.cci})`);
-    reasons.push(`Página solicita datos sensibles en dominio no oficial: ${kinds.join(", ")}.`);
+    const intent = financialIntentScore({
+      host, path: u.pathname || "", lexical: pageHints.lexical || {}, sensitive: s
+    });
+    const hasCardLike = (s.card||0) + (s.cci||0) + (s.expiry||0) + (s.cvv||0) > 0;
+
+    if (hasCardLike || intent >= 2) {
+      const highWeight = (s.card||0) + (s.cvv||0) > 0 ? 4 : 3;
+      risk += highWeight;
+      const kinds = [];
+      if (s.dni)   kinds.push(`DNI (${s.dni})`);
+      if (s.card)  kinds.push(`Tarjeta (${s.card})`);
+      if (s.cvv)   kinds.push(`CVV (${s.cvv})`);
+      if (s.expiry)kinds.push(`Fecha de vencimiento (${s.expiry})`);
+      if (s.cci)   kinds.push(`CCI (${s.cci})`);
+      reasons.push(`Datos sensibles en contexto financiero no oficial: ${kinds.join(", ")}.`);
+    } else {
+      if (s.dni) {
+        if (isSafeDniDomain(etld1)) {
+          reasons.push("DNI solicitado en dominio público/educativo (esperable).");
+        } else if (!dniOnlyFinancial) {
+          risk += 1; reasons.push("DNI detectado fuera de lista oficial (alerta suave).");
+        } else {
+          reasons.push("DNI detectado sin señales financieras; se mantiene en BAJO.");
+        }
+      }
+    }
   }
 
   if (pageHints.hasPasswordFields && !trusted.includes(etld1)) {
@@ -112,8 +163,7 @@ async function assessRisk(url, pageHints = {}) {
   // Decidir bloqueo estricto
   let enforceStrict = false;
   if (strictMode && !trusted.includes(etld1)) {
-    // si hay alguno de los tipos configurados presentes, aplicamos bloqueo
-    const present = strictBlockKinds.some(k => (s[k] || 0) > 0);
+    const present = (pageHints.sensitive && (strictBlockKinds || []).some(k => (pageHints.sensitive[k] || 0) > 0)) || false;
     enforceStrict = present;
   }
 
@@ -125,7 +175,7 @@ async function assessRisk(url, pageHints = {}) {
   };
 }
 
-// --- Mensajería ---
+// -------- Mensajería --------
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (msg.type === "PAGE_HINTS") {

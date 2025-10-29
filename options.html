@@ -11,28 +11,18 @@
     button{ padding:8px 12px; border-radius:8px; border:1px solid #bbb; background:#fff; cursor:pointer; font-weight:600; }
     .muted{ color:#666; font-size:12px; }
     label.switch { display:inline-flex; gap:8px; align-items:center; cursor:pointer; font-weight:600; }
-  .footer {
-  border-top: 1px solid #eee;
-  margin-top: 16px;
-  padding-top: 10px;
-  font-size: 12px;
-  color: #666;
-}
-.footer a { color: inherit; text-decoration: underline; }
-.footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.footer .cta {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid #f4c776; background: #fff8e7; color: #7a4a00;
-  padding: 6px 10px; border-radius: 999px; font-weight: 700; text-decoration: none;
-}
-.footer .cta:hover { background: #fff2cc; }
+    .footer { border-top: 1px solid #eee; margin-top: 16px; padding-top: 10px; font-size: 12px; color: #666; }
+    .footer a { color: inherit; text-decoration: underline; }
+    .footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .footer .cta { display:inline-flex; align-items:center; gap:6px; border:1px solid #f4c776; background:#fff8e7; color:#7a4a00; padding:6px 10px; border-radius:999px; font-weight:700; text-decoration:none; }
+    .footer .cta:hover { background:#fff2cc; }
   </style>
 </head>
 <body>
   <div class="card">
     <h2>Modo Estricto</h2>
     <label class="switch"><input type="checkbox" id="strictMode"> Activar bloqueo temporal en dominios no oficiales</label>
-    <p class="muted">Cuando esté activo, se bloqueará la escritura en campos sensibles (p.ej. tarjeta, CVV, vencimiento, CCI) y podrás <b>desbloquear por 60s</b> desde la página.</p>
+    <p class="muted">Bloquea la escritura en campos sensibles y permite <b>desbloquear por 60s</b> desde la página.</p>
     <div class="row">
       <label><input type="checkbox" class="strictKind" value="card" checked> Tarjeta</label>
       <label><input type="checkbox" class="strictKind" value="cvv" checked> CVV/CVC</label>
@@ -47,6 +37,16 @@
   </div>
 
   <div class="card">
+    <h2>Comportamiento de alerta (DNI)</h2>
+    <label><input type="checkbox" id="dniOnlyFinancial" checked> Alertar por <b>DNI</b> solo si hay <b>contexto financiero</b> (recomendado)</label>
+    <p class="muted">Si lo desactivas, se mostrará una alerta suave cuando se solicite DNI fuera de dominios oficiales, incluso sin señales bancarias.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="saveBehavior">Guardar</button>
+      <span id="savedBehavior" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Dominios confiables (eTLD+1)</h2>
     <p class="muted">Uno por línea. Ej: <code>bcp.com.pe</code>, <code>bbva.pe</code>, <code>scotiabank.com.pe</code></p>
     <textarea id="list"></textarea>
@@ -57,16 +57,17 @@
     </div>
   </div>
 
-  <script type="module" src="options.js"></script>
- <footer class="footer">
-  <div class="row">
-    <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
-    <div>
-      <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+  <footer class="footer">
+    <div class="row">
+      <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
+      <div>
+        <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+      </div>
     </div>
-  </div>
-</footer>
+  </footer>
+
+  <script type="module" src="options.js"></script>
 </body>
 </html>

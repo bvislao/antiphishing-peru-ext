@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>Anti-Phishing PE</title>
   <style>
-    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 12px; width: 300px; }
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 12px; width: 320px; }
     .pill { display:inline-block; padding:4px 8px; border-radius:999px; font-weight:700; }
     .low{ background:#e7f7e7; color:#116611; }
     .mid{ background:#fff2cc; color:#7a4a00; }
@@ -13,40 +13,32 @@
     .muted{ color:#666; font-size:12px; }
     button{ padding:6px 10px; border-radius:8px; border:1px solid #bbb; background:#fff; cursor:pointer; font-weight:600; }
     .row{ display:flex; gap:8px; margin-top:8px; }
-   .footer {
-  border-top: 1px solid #eee;
-  margin-top: 12px;
-  padding-top: 8px;
-  font-size: 12px;
-  color: #666;
-}
-.footer a { color: inherit; text-decoration: underline; }
-.footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.footer .cta {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid #f4c776; background: #fff8e7; color: #7a4a00;
-  padding: 6px 10px; border-radius: 999px; font-weight: 700; text-decoration: none;
-}
-.footer .cta:hover { background: #fff2cc; }
+    .footer { border-top: 1px solid #eee; margin-top: 12px; padding-top: 8px; font-size: 12px; color: #666; }
+    .footer a { color: inherit; text-decoration: underline; }
+    .footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .footer .cta { display:inline-flex; align-items:center; gap:6px; border:1px solid #f4c776; background:#fff8e7; color:#7a4a00; padding:6px 10px; border-radius:999px; font-weight:700; text-decoration:none; }
+    .footer .cta:hover { background:#fff2cc; }
   </style>
 </head>
 <body>
   <div id="status">Analizando…</div>
   <div class="row">
-    <button id="openOptions">Editar lista confiable</button>
+    <button id="openOptions">Editar lista & Modo estricto</button>
     <button id="refresh">Reanalizar</button>
   </div>
-  <p class="muted">Consejo: Evita ingresar credenciales si dudas del dominio.</p>
-  <script type="module" src="popup.js"></script>
+  <p class="muted">Consejo: Verifica el dominio exacto antes de ingresar datos.</p>
+
   <footer class="footer">
-  <div class="row">
-    <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
-    <div>
-      <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+    <div class="row">
+      <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
+      <div>
+        <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+      </div>
     </div>
-  </div>
-</footer>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

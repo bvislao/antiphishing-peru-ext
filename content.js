@@ -3,6 +3,15 @@
   let strictUnlockUntil = 0;
   let lastStrictKinds = [];
 
+  // --- Listas para "intención financiera" ---
+  const FIN_BRANDS = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn","yape","plin","visa","mastercard","amex"];
+  const FIN_TERMS  = [
+    "banca","en linea","online banking","transferencia","pago","tarjeta","credito","préstamo","prestamo",
+    "hipoteca","saldo","cci","cuenta interbancaria","token","otp","clave dinamica","clave dinámica",
+    "mi cuenta","ahorro","ctacte","cajero","cobro","voucher"
+  ];
+
+  // --- Utils ---
   const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/\p{Diacritic}/gu, "");
   const isNumLike = (el) => ["tel","number","text","password","search"].includes(el.type || "") || !el.type;
 
@@ -18,6 +27,7 @@
     return input.getAttribute("placeholder") || input.getAttribute("aria-label") || input.name || input.id || "";
   }
 
+  // Luhn para tarjetas
   function luhnValid(num) {
     const s = (num || "").replace(/\D/g, "");
     if (s.length < 13 || s.length > 19) return false;
@@ -30,6 +40,7 @@
     return (sum % 10) === 0;
   }
 
+  // Clasificación heurística por texto/atributos
   function classifySensitiveByText(txt, input) {
     const t = norm(txt);
     if (/\bdni\b/.test(t) || /documento( de)? identidad|nro(\.|) doc|num(\.|) doc/.test(t)) return "dni";
@@ -64,7 +75,6 @@
       const lbl = labelTextFor(el);
       let kind = classifySensitiveByText(lbl, el);
 
-      // valor actual
       const v = (el.value || "").replace(/\s/g, "");
       if (!kind) {
         if (/\d{8}/.test(v) && v.replace(/\D/g,"").length === 8) kind = "dni";
@@ -73,13 +83,26 @@
         if (/\d{13,19}/.test(v) && luhnValid(v)) kind = "card";
         if (/^\d{3,4}$/.test(v) && /cvv|cvc|seguridad/i.test(lbl)) kind = "cvv";
       }
-
       if (kind) {
-        counts[kind]++; 
-        details.push({ type: kind, name: el.name || "", id: el.id || "", label: lbl.slice(0, 80) });
+        counts[kind]++;
+        details.push({ type: kind, name: el.name || "", id: el.id || "", label: (lbl || "").slice(0, 80) });
       }
     }
     return { counts, details };
+  }
+
+  function collectLexicalHints() {
+    const nodes = [
+      ...document.querySelectorAll("h1,h2,h3,h4,label,button,a,[role='button'],.btn,input[placeholder]")
+    ].slice(0, 400);
+    const imgs = Array.from(document.querySelectorAll("img[alt], img[src]")).slice(0, 150);
+    let text = nodes.map(n => (n.getAttribute("aria-label") || n.textContent || n.placeholder || "")).join(" ");
+    text += " " + imgs.map(i => (i.alt || i.src || "")).join(" ");
+    const t = norm(text);
+    let financialHits = 0, brandHits = 0;
+    FIN_TERMS.forEach(k => { if (t.includes(k)) financialHits++; });
+    FIN_BRANDS.forEach(k => { if (t.includes(k)) brandHits++; });
+    return { financialHits, brandHits };
   }
 
   function collectPageHints() {
@@ -87,7 +110,8 @@
     const hasPasswordFields = !!document.querySelector('input[type="password"]');
     const s = scanSensitiveFields();
     const sensitive = { dni:s.counts.dni, card:s.counts.card, cci:s.counts.cci, expiry:s.counts.expiry, cvv:s.counts.cvv, _details:s.details };
-    return { forms, hasPasswordFields, sensitive };
+    const lexical = collectLexicalHints();
+    return { forms, hasPasswordFields, sensitive, lexical };
   }
 
   function send() {
@@ -105,9 +129,9 @@
     });
   }
 
-  // Aplicar/retirar bloqueo estricto
+  // ---- Bloqueo estricto ----
   function applyStrictLock(blockKinds) {
-    if (Date.now() < strictUnlockUntil) return; // desbloqueado temporalmente
+    if (Date.now() < strictUnlockUntil) return;
     const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
     for (const el of inputs) {
       const t = (el.type || "").toLowerCase();
@@ -117,7 +141,6 @@
       const kind = classifySensitiveByText(lbl, el);
       if (!kind || !blockKinds.includes(kind)) continue;
 
-      // marca y bloquea
       if (!el.dataset.apStrict) {
         el.dataset.apStrict = "1";
         el.dataset.apPrevPlaceholder = el.getAttribute("placeholder") || "";
@@ -125,7 +148,6 @@
         el.style.outline = "2px dashed #E74C3C";
         el.style.background = "#fff6f6";
 
-        // evita escritura
         const handler = (ev) => {
           if (Date.now() < strictUnlockUntil) return;
           ev.preventDefault();
@@ -138,7 +160,6 @@
       }
     }
     showStrictPill();
-    // observar nuevos nodos (SPAs)
     ensureObserver(blockKinds);
   }
 
@@ -156,12 +177,10 @@
       if (el.dataset.apPrevPlaceholder !== undefined) el.setAttribute("placeholder", el.dataset.apPrevPlaceholder);
       el.style.outline = "";
       el.style.background = "";
-      // los listeners se mantienen inofensivos pues chequean strictUnlockUntil
     });
     hideStrictPill();
   }
 
-  // UI de pill para desbloquear 60s
   function showStrictPill(){
     if (Date.now() < strictUnlockUntil) { hideStrictPill(); return; }
     if (document.getElementById("__ap_strict_pill")) return;
@@ -178,7 +197,7 @@
       strictUnlockUntil = Date.now() + 60_000;
       pill.textContent = "✅ Desbloqueado por 60s";
       pill.style.background = "#e7f7e7"; pill.style.color = "#116611"; pill.style.border = "1px solid #3cb371";
-      setTimeout(() => { clearStrictLock(); }, 50); // quita estilos
+      setTimeout(() => { clearStrictLock(); }, 50);
       setTimeout(() => { strictUnlockUntil = 0; applyStrictLock(lastStrictKinds); }, 60_000);
       setTimeout(() => { hideStrictPill(); }, 2000);
     };
@@ -189,7 +208,7 @@
     if (pill) pill.remove();
   }
 
-  // Banner + sonido (como antes)
+  // ---- UI alerta ----
   function showBanner(level, reasons) {
     if (document.getElementById("__anti_phishing_banner")) return;
     const wrap = document.createElement("div");
@@ -216,14 +235,13 @@
     row.style.display = "flex"; row.style.gap = "8px"; row.style.marginTop = "10px";
     const btnMore = document.createElement("button"); btnMore.textContent = "Más info"; Object.assign(btnMore.style, baseBtn());
     const btnClose = document.createElement("button"); btnClose.textContent = "Cerrar"; Object.assign(btnClose.style, baseBtn());
-    btnMore.onclick = () => alert("Se detectaron campos sensibles (DNI/Tarjeta/CCI/Fecha/CVV). Verifica el dominio y evita ingresar datos si no es el sitio oficial.");
+    btnMore.onclick = () => window.open("https://github.com/bvislao/antiphishing-peru-ext","_blank","noopener,noreferrer");
     btnClose.onclick = () => wrap.remove();
 
     row.appendChild(btnMore); row.appendChild(btnClose);
     wrap.appendChild(title); wrap.appendChild(list); wrap.appendChild(row);
     document.documentElement.appendChild(wrap);
   }
-
   function baseBtn() {
     return { border:"1px solid #bbb", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", background:"#fff", fontWeight:"600" };
   }
