@@ -120,22 +120,20 @@
   function send() {
     try {
       X.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
-        // Algunos navegadores usan promesas, otros callback. Resguárdate:
         if (!res || (res.type !== "RISK_RESULT")) return;
-        const { level, reasons } = res.payload || {};
+        const { level, reasons, isTrusted, etld1 } = res.payload || {};
         if (level === "MEDIO" || level === "ALTO") {
-          showBanner(level, reasons);
+          showBanner(level, reasons, !!isTrusted, etld1 || "");
           beep(level);
         }
-        // (Bloqueo estricto opcional: se puede activar aquí según config,
-        // mantenemos UI de pill para no romper Safari/Firefox permisos)
       });
     } catch {}
   }
 
   // ---- UI alerta ----
   function baseBtn() { return { border:"1px solid #bbb", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", background:"#fff", fontWeight:"600" }; }
-  function showBanner(level, reasons) {
+
+  function showBanner(level, reasons, isTrusted=false, etld1="") {
     if (document.getElementById("__anti_phishing_banner")) return;
     const wrap = document.createElement("div");
     wrap.id = "__anti_phishing_banner";
@@ -159,13 +157,76 @@
 
     const row = document.createElement("div");
     row.style.display = "flex"; row.style.gap = "8px"; row.style.marginTop = "10px";
-    const btnMore = document.createElement("button"); btnMore.textContent = "Más info"; Object.assign(btnMore.style, baseBtn());
-    const btnClose = document.createElement("button"); btnClose.textContent = "Cerrar"; Object.assign(btnClose.style, baseBtn());
+
+    const btnMore = document.createElement("button");
+    btnMore.textContent = "Más info";
+    Object.assign(btnMore.style, baseBtn());
     btnMore.onclick = () => window.open("https://github.com/bvislao/antiphishing-peru-ext","_blank","noopener,noreferrer");
+
+    const btnClose = document.createElement("button");
+    btnClose.textContent = "Cerrar";
+    Object.assign(btnClose.style, baseBtn());
     btnClose.onclick = () => wrap.remove();
 
-    row.appendChild(btnMore); row.appendChild(btnClose);
-    wrap.appendChild(title); wrap.appendChild(list); wrap.appendChild(row);
+    // Toggle confiar / quitar confianza
+    const btnToggle = document.createElement("button");
+    Object.assign(btnToggle.style, baseBtn());
+    btnToggle.style.borderColor = isTrusted ? "#999" : "#5dc08f";
+    btnToggle.textContent = isTrusted ? "Quitar de confianza" : "Confiar en este dominio";
+
+    btnToggle.onclick = () => {
+      if (!isTrusted) {
+        const ok = confirm(
+          "Vas a añadir este dominio a tu lista de sitios confiables.\n" +
+          "Úsalo solo si estás 100% seguro. Esta acción ocultará futuras alertas para este dominio.\n\n" +
+          "¿Continuar bajo tu responsabilidad?"
+        );
+        if (!ok) return;
+        X.runtime.sendMessage({ type: "USER_TRUST_DOMAIN_ADD", payload: { url: location.href } }, (res) => {
+          if (res && res.type === "USER_TRUST_DOMAIN_ADD_OK") {
+            title.textContent = "🟢 Dominio añadido a tu lista de confianza" + (etld1 ? (": " + etld1) : "");
+            wrap.style.background = "#e8f7ef";
+            wrap.style.border = "1px solid #5dc08f";
+            btnToggle.textContent = "Quitar de confianza";
+            btnToggle.style.borderColor = "#999";
+            isTrusted = true;
+          } else {
+            alert("No se pudo añadir. Verifica el background.");
+          }
+        });
+      } else {
+        const ok = confirm("Quitarás este dominio de tu lista de confianza. ¿Deseas continuar?");
+        if (!ok) return;
+        X.runtime.sendMessage({ type: "USER_TRUST_DOMAIN_REMOVE", payload: { url: location.href, etld1 } }, (res) => {
+          if (res && res.type === "USER_TRUST_DOMAIN_REMOVE_OK") {
+            title.textContent = "⚠️ Dominio removido de tu lista de confianza";
+            wrap.style.background = "#ffe8b3";
+            wrap.style.border = "1px solid #ffb84d";
+            btnToggle.textContent = "Confiar en este dominio";
+            btnToggle.style.borderColor = "#5dc08f";
+            isTrusted = false;
+          } else {
+            alert("No se pudo quitar. Verifica el background.");
+          }
+        });
+      }
+    };
+
+    // Orden botones
+    row.appendChild(btnToggle);
+    row.appendChild(btnMore);
+    row.appendChild(btnClose);
+
+    const disclaimer = document.createElement("div");
+    disclaimer.style.marginTop = "6px";
+    disclaimer.style.fontSize = "12px";
+    disclaimer.style.color = "#444";
+    disclaimer.textContent = "Añadir a confianza es bajo tu responsabilidad. Úsalo solo si estás 100% seguro.";
+
+    wrap.appendChild(title);
+    wrap.appendChild(list);
+    wrap.appendChild(row);
+    wrap.appendChild(disclaimer);
     document.documentElement.appendChild(wrap);
   }
 

@@ -1,70 +1,106 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Config
-APP_NAME="anti-phishing-pe"
+# ===== Config =====
 DIST_DIR="dist"
-SRC_FILES=(
-  "manifest.chrome.json"
-  "manifest.firefox.json"
-  "manifest.safari.json"
+
+# Archivos comunes (se copian solo si existen)
+COMMON_FILES=(
   "background.js"
   "content.js"
-  "popup.js"
+  "whitelist.js"
+  "options.html"
   "options.js"
   "popup.html"
-  "options.html"
+  "popup.js"
   "icon16.png"
   "icon48.png"
   "icon128.png"
-  # Incluye whitelist.js si lo usas:
-  "whitelist.js"
-  # Docs opcionales
   "README.md"
   "LICENSE"
 )
 
-# Limpieza
-rm -rf "${DIST_DIR}"
-mkdir -p "${DIST_DIR}"
+# ===== Helpers =====
+copy_if_exists() {
+  local src="$1"
+  local dst="$2"
+  if [[ -e "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -R "$src" "$dst"
+  fi
+}
 
-# Helper para copiar archivos a un destino
-copy_files() {
-  local target="$1"
-  mkdir -p "${target}"
-  for f in "${SRC_FILES[@]}"; do
-    if [[ -f "$f" ]]; then
-      cp -f "$f" "${target}/"
-    fi
+copy_common() {
+  local target_dir="$1"
+  for f in "${COMMON_FILES[@]}"; do
+    copy_if_exists "$f" "$target_dir/$f"
   done
 }
 
-# CHROME
-CHROME_DIR="${DIST_DIR}/chrome"
-copy_files "${CHROME_DIR}"
-mv "${CHROME_DIR}/manifest.chrome.json" "${CHROME_DIR}/manifest.json"
-rm -f "${CHROME_DIR}/manifest.firefox.json" "${CHROME_DIR}/manifest.safari.json"
-( cd "${CHROME_DIR}" && zip -qr "../chrome.zip" . )
+# Detecta versión desde manifest.chrome.json (fallback 0.0.0)
+detect_version() {
+  local mf="manifest.chrome.json"
+  if [[ -f "$mf" ]]; then
+    # Extrae el primer "version": "X.Y.Z"
+    local v
+    v=$(grep -oE '"version"\s*:\s*"[^"]+"' "$mf" | head -n1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
+    [[ -n "${v:-}" ]] && echo "$v" && return 0
+  fi
+  echo "0.0.0"
+}
 
-# FIREFOX
-FIREFOX_DIR="${DIST_DIR}/firefox"
-copy_files "${FIREFOX_DIR}"
-mv "${FIREFOX_DIR}/manifest.firefox.json" "${FIREFOX_DIR}/manifest.json"
-rm -f "${FIREFOX_DIR}/manifest.chrome.json" "${FIREFOX_DIR}/manifest.safari.json"
-( cd "${FIREFOX_DIR}" && zip -qr "../firefox.zip" . )
+zip_dir() {
+  local src_dir="$1"
+  local zip_path="$2"
+  ( cd "$src_dir" && zip -qr "../$zip_path" . )
+}
 
-# SAFARI (fuente para convertir en Xcode)
-SAFARI_DIR="${DIST_DIR}/safari-src"
-copy_files "${SAFARI_DIR}"
-mv "${SAFARI_DIR}/manifest.safari.json" "${SAFARI_DIR}/manifest.json"
-rm -f "${SAFARI_DIR}/manifest.chrome.json" "${SAFARI_DIR}/manifest.firefox.json"
-( cd "${SAFARI_DIR}" && zip -qr "../safari-src.zip" . )
+# ===== Build =====
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR"
 
-echo "Hecho:"
-echo " - ${DIST_DIR}/chrome.zip"
-echo " - ${DIST_DIR}/firefox.zip"
-echo " - ${DIST_DIR}/safari-src.zip"
+VERSION="$(detect_version)"
+echo "Versión detectada: $VERSION"
 
-echo
-echo "Para Safari, convierte el paquete con Xcode:"
-echo "xcrun safari-web-extension-converter ${PWD}/${DIST_DIR}/safari-src --project-location ${PWD}/${DIST_DIR}/SafariProj --project-name AntiPhishingPE --bundle-identifier me.bvislao.antiphishing"
+# --- Chrome ---
+echo "Empaquetando Chrome..."
+CHROME_DIR="$DIST_DIR/chrome"
+mkdir -p "$CHROME_DIR"
+copy_common "$CHROME_DIR"
+cp manifest.chrome.json "$CHROME_DIR/manifest.json"
+zip_dir "$CHROME_DIR" "antiphishing-peru-chrome-v$VERSION.zip"
+
+# --- Firefox ---
+echo "Empaquetando Firefox..."
+FIREFOX_DIR="$DIST_DIR/firefox"
+mkdir -p "$FIREFOX_DIR"
+copy_common "$FIREFOX_DIR"
+cp manifest.firefox.json "$FIREFOX_DIR/manifest.json"
+zip_dir "$FIREFOX_DIR" "antiphishing-peru-firefox-v$VERSION.zip"
+
+# --- Safari (fuente para Xcode) ---
+echo "Empaquetando Safari (fuente para converter de Xcode)..."
+SAFARI_DIR="$DIST_DIR/safari-src"
+mkdir -p "$SAFARI_DIR"
+copy_common "$SAFARI_DIR"
+cp manifest.safari.json "$SAFARI_DIR/manifest.json"
+zip_dir "$SAFARI_DIR" "antiphishing-peru-safari-src-v$VERSION.zip"
+
+echo "Archivos generados:"
+echo " - $DIST_DIR/antiphishing-peru-chrome-v$VERSION.zip"
+echo " - $DIST_DIR/antiphishing-peru-firefox-v$VERSION.zip"
+echo " - $DIST_DIR/antiphishing-peru-safari-src-v$VERSION.zip"
+
+# Tips Safari:
+cat <<'TIP'
+
+Para Safari:
+1) Descomprime antiphishing-peru-safari-src-*.zip
+2) En macOS, ejecuta:
+   xcrun safari-web-extension-converter RUTA/DE/CARPETA \
+     --project-location ./SafariProject \
+     --app-name "Anti-Phishing Perú" \
+     --force
+3) Abre el proyecto en Xcode, habilita los targets (macOS/iOS), firma y ejecuta.
+
+TIP

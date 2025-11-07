@@ -1,73 +1,73 @@
 <!doctype html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Configuración de seguridad</title>
+  <title>Anti-Phishing Perú — Opciones</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 16px; max-width: 760px; }
-    textarea { width: 100%; height: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; }
-    .card { border:1px solid #e0e0e0; border-radius:12px; padding:16px; margin-bottom:16px; }
-    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    button{ padding:8px 12px; border-radius:8px; border:1px solid #bbb; background:#fff; cursor:pointer; font-weight:600; }
-    .muted{ color:#666; font-size:12px; }
-    label.switch { display:inline-flex; gap:8px; align-items:center; cursor:pointer; font-weight:600; }
-    .footer { border-top: 1px solid #eee; margin-top: 16px; padding-top: 10px; font-size: 12px; color: #666; }
-    .footer a { color: inherit; text-decoration: underline; }
-    .footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .footer .cta { display:inline-flex; align-items:center; gap:6px; border:1px solid #f4c776; background:#fff8e7; color:#7a4a00; padding:6px 10px; border-radius:999px; font-weight:700; text-decoration:none; }
-    .footer .cta:hover { background:#fff2cc; }
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 20px; color:#1e242a;}
+    h1{font-size: 20px; margin: 0 0 8px}
+    h2{font-size: 16px; margin: 18px 0 8px}
+    .card{border:1px solid #e3e9f0; border-radius:12px; padding:16px; background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.05);}
+    textarea{width:100%; min-height:110px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; padding:10px; border:1px solid #d6dee6; border-radius:8px;}
+    .row{display:flex; gap:16px; flex-wrap:wrap;}
+    .col{flex:1 1 320px; min-width: 320px;}
+    .hint{color:#6a7781; font-size:12px; margin-top:6px}
+    button{border:1px solid #c8d3dd; background:#fff; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600}
+    button.primary{background:#007b80; color:#fff; border-color:#007b80}
+    .muted{color:#6a7781; font-size:13px}
+    .footer{margin-top:12px; color:#6a7781; font-size:12px}
+    .chips{display:flex; gap:8px; flex-wrap: wrap; margin-top:8px}
+    .chip{border:1px solid #e3e9f0; padding:6px 10px; border-radius:999px; font-size:12px; background:#f8fafc}
+    .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Modo Estricto</h2>
-    <label class="switch"><input type="checkbox" id="strictMode"> Activar bloqueo temporal en dominios no oficiales</label>
-    <p class="muted">Bloquea la escritura en campos sensibles y permite <b>desbloquear por 60s</b> desde la página.</p>
-    <div class="row">
-      <label><input type="checkbox" class="strictKind" value="card" checked> Tarjeta</label>
-      <label><input type="checkbox" class="strictKind" value="cvv" checked> CVV/CVC</label>
-      <label><input type="checkbox" class="strictKind" value="expiry" checked> Fecha de vencimiento</label>
-      <label><input type="checkbox" class="strictKind" value="cci" checked> CCI</label>
-      <label><input type="checkbox" class="strictKind" value="dni"> DNI</label>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button id="saveStrict">Guardar</button>
-      <span id="savedStrict" class="muted"></span>
-    </div>
-  </div>
+  <h1>Anti-Phishing Perú — Opciones</h1>
+  <p class="muted">Administra tus listas de confianza. Lo que agregues aquí no mostrará alertas en esos dominios.</p>
 
-  <div class="card">
-    <h2>Comportamiento de alerta (DNI)</h2>
-    <label><input type="checkbox" id="dniOnlyFinancial" checked> Alertar por <b>DNI</b> solo si hay <b>contexto financiero</b> (recomendado)</label>
-    <p class="muted">Si lo desactivas, se mostrará una alerta suave cuando se solicite DNI fuera de dominios oficiales, incluso sin señales bancarias.</p>
-    <div class="row" style="margin-top:10px">
-      <button id="saveBehavior">Guardar</button>
-      <span id="savedBehavior" class="muted"></span>
+  <div class="row">
+    <div class="col card">
+      <h2>Dominios confiables — Base (solo lectura)</h2>
+      <div id="baseDomainsChips" class="chips"></div>
+      <div class="hint">Estos vienen preconfigurados (bancos, plataformas conocidas). Puedes extender abajo.</div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Dominios confiables (eTLD+1)</h2>
-    <p class="muted">Uno por línea. Ej: <code>bcp.com.pe</code>, <code>bbva.pe</code>, <code>scotiabank.com.pe</code></p>
-    <textarea id="list"></textarea>
-    <div class="row" style="margin-top:10px">
-      <button id="save">Guardar</button>
-      <button id="reset">Restablecer (semilla)</button>
-      <span id="saved" class="muted"></span>
-    </div>
-  </div>
-
-  <footer class="footer">
-    <div class="row">
-      <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
-      <div>
-        <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
-        &nbsp;·&nbsp;
-        <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+    <div class="col card">
+      <h2>Dominios confiables — Añadidos por ti</h2>
+      <textarea id="userDomains" placeholder="uno por línea: ejemplo.com.pe"></textarea>
+      <div class="actions">
+        <button id="saveUserDomains" class="primary">Guardar</button>
+        <button id="clearUserDomains">Limpiar</button>
+        <span class="muted" id="userDomainsMsg"></span>
       </div>
     </div>
-  </footer>
+  </div>
 
-  <script type="module" src="options.js"></script>
+  <div class="row" style="margin-top:16px">
+    <div class="col card">
+      <h2>Sufijos confiables — Base (solo lectura)</h2>
+      <div id="baseSuffixesChips" class="chips"></div>
+      <div class="hint">Ej: gob.pe, edu.pe. Puedes añadir más sufijos si lo necesitas.</div>
+    </div>
+
+    <div class="col card">
+      <h2>Sufijos confiables — Añadidos por ti</h2>
+      <textarea id="userSuffixes" placeholder="uno por línea: com.pe"></textarea>
+      <div class="actions">
+        <button id="saveUserSuffixes" class="primary">Guardar</button>
+        <button id="clearUserSuffixes">Limpiar</button>
+        <span class="muted" id="userSuffixesMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    © 2025 bvislao • <a href="https://bvislao.me" target="_blank" rel="noopener">bvislao.me</a> <br />
+    • Código: <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener">GitHub</a>
+    <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
+  </div>
+
+  <script src="options.js"></script>
 </body>
 </html>
