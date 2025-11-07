@@ -1,116 +1,83 @@
-name: release-browser-zips
+name: Build & Release Extensions
 
 on:
   push:
-    tags: [ 'v*.*.*' ]
+    tags:
+      - 'v*'           # crea release automáticamente si haces push de un tag vX.Y.Z
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Versión a release (ej: v1.2.3)'
-        required: true
-        type: string
+      tag:
+        description: 'Tag a usar (ej: v1.2.3). Si lo dejas vacío, se tomará la versión del manifest.chrome.json'
+        required: false
+      prerelease:
+        description: '¿Marcar como prerelease?'
+        type: boolean
+        default: false
+        required: false
 
 permissions:
-  contents: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || inputs.version }}
-  cancel-in-progress: true
+  contents: write   # necesario para crear el release y subir adjuntos
 
 jobs:
-  build-and-release:
+  build-release:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup tools
+      - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip jq coreutils
-
-      - name: Determine tag/version
-        id: meta
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="${{ inputs.version }}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
-
-          if [[ -z "$TAG" ]]; then
-            echo "No tag provided/detected"; exit 1
-          fi
-
-          # Sanitiza nombre para archivos
-          SAFE_TAG="${TAG#refs/tags/}"
-          echo "tag=$SAFE_TAG" >> $GITHUB_OUTPUT
-
-          # Busca sección del CHANGELOG para el body (opcional)
-          NOTES="Release $SAFE_TAG"
-          if [[ -f CHANGELOG.md ]]; then
-            awk -v tag="$SAFE_TAG" '
-              $0 ~ "^## \\[" tag "\\]" { on=1; next }
-              on && $0 ~ "^## \\[" { on=0 }
-              on { print }
-            ' CHANGELOG.md > dist_notes.txt || true
-            if [[ -s dist_notes.txt ]]; then
-              NOTES="$(printf "## %s\n\n%s" "$SAFE_TAG" "$(cat dist_notes.txt)")"
-            fi
-          fi
-          printf "%s" "$NOTES" > release-notes.md
-
-      - name: Create tag (only for manual runs)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          TAG: ${{ steps.meta.outputs.tag }}
-        run: |
-          # Crea/actualiza tag anotado con GITHUB_TOKEN
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG ya existe localmente."
-          fi
-          git tag -a "$TAG" -m "Release $TAG" || true
-          git push origin "$TAG" || true
+          sudo apt-get install -y jq zip
 
       - name: Make build.sh executable
         run: chmod +x ./build.sh
 
-      - name: Build ZIPs (chrome / firefox / safari-src)
+      - name: Build packages (chrome/firefox/safari-src)
         run: ./build.sh
 
-      - name: Rename artifacts with version
-        id: rename
-        env:
-          TAG: ${{ steps.meta.outputs.tag }}
+      - name: Compute version & tag
+        id: meta
+        shell: bash
         run: |
-          mkdir -p dist/release
-          cp dist/chrome.zip      "dist/release/anti-phishing-pe-chrome-${TAG}.zip"
-          cp dist/firefox.zip     "dist/release/anti-phishing-pe-firefox-${TAG}.zip"
-          cp dist/safari-src.zip  "dist/release/anti-phishing-pe-safari-src-${TAG}.zip"
+          VERSION=$(jq -r '.version' manifest.chrome.json)
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              TAG="${GITHUB_REF#refs/tags/}"
+            else
+              TAG="v${VERSION}"
+            fi
+          else
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Checksums
-          (cd dist/release && sha256sum *.zip > checksums-${TAG}.txt)
-
-      - name: Upload build artifacts (for CI browsing)
+      - name: Upload build artifacts (for CI debugging)
         uses: actions/upload-artifact@v4
         with:
-          name: browser-zips-${{ steps.meta.outputs.tag }}
-          path: dist/release/*
+          name: bundles-${{ steps.meta.outputs.version }}
+          path: dist/*.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.tag }}
-          body_path: release-notes.md
+          name: Anti-Phishing Perú ${{ steps.meta.outputs.tag }}
+          body: |
+            Build automático de la extensión **Anti-Phishing Perú**.
+
+            **Versión (manifest.chrome.json):** ${{ steps.meta.outputs.version }}
+
+            **Archivos incluidos:**
+            - antiphishing-peru-chrome-v${{ steps.meta.outputs.version }}.zip
+            - antiphishing-peru-firefox-v${{ steps.meta.outputs.version }}.zip
+            - antiphishing-peru-safari-src-v${{ steps.meta.outputs.version }}.zip
+
+            > Nota: el paquete de Safari es el **código fuente** para convertir en Xcode con `safari-web-extension-converter`.
+          prerelease: ${{ github.event.inputs.prerelease || 'false' }}
           files: |
-            dist/release/anti-phishing-pe-chrome-${{ steps.meta.outputs.tag }}.zip
-            dist/release/anti-phishing-pe-firefox-${{ steps.meta.outputs.tag }}.zip
-            dist/release/anti-phishing-pe-safari-src-${{ steps.meta.outputs.tag }}.zip
-            dist/release/checksums-${{ steps.meta.outputs.tag }}.txt
-          draft: false
-          prerelease: false
+            dist/antiphishing-peru-chrome-v${{ steps.meta.outputs.version }}.zip
+            dist/antiphishing-peru-firefox-v${{ steps.meta.outputs.version }}.zip
+            dist/antiphishing-peru-safari-src-v${{ steps.meta.outputs.version }}.zip
