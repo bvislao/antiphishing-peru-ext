@@ -4,12 +4,17 @@
   "description": "Detecta phishing bancario/financiero en Perú y alerta (banner, sonido, badge). Incluye Modo Estricto.",
   "version": "0.9.6",
   "permissions": ["storage", "notifications"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Anti-Phishing PE", "default_popup": "popup.html" },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": { "default_title": "Anti-Phishing PE" },
   "options_page": "options.html",
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "browser_specific_settings": {
-    "gecko": { "id": "antiphishing-pe@bvislao", "strict_min_version": "109.0" }
+    "gecko": {
+      "id": "antiphishing-peru@bvislao",
+      "strict_min_version": "109.0"
+    }
   },
   "content_scripts": [
     {
