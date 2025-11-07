@@ -2,16 +2,20 @@
   "manifest_version": 3,
   "name": "Anti-Phishing Perú (Bancos & Financieras)",
   "description": "Detecta phishing bancario/financiero en Perú y alerta (banner, sonido, badge). Incluye Modo Estricto.",
-  "version": "0.9.5",
-  "permissions": ["storage", "tabs", "webNavigation", "activeTab", "notifications"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "version": "0.9.6",
+  "permissions": ["storage", "notifications"],
+  "background": { "service_worker": "background.js" },
   "action": { "default_title": "Anti-Phishing PE", "default_popup": "popup.html" },
   "options_page": "options.html",
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "homepage_url": "https://github.com/bvislao/antiphishing-peru-ext",
   "author": "bvislao (https://bvislao.me)",
   "content_scripts": [
-    { "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_start" }
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["whitelist.js", "content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
   ]
 }

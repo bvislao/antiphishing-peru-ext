@@ -3,79 +3,101 @@
 // =========================
 const API = (typeof globalThis.browser !== "undefined") ? globalThis.browser : globalThis.chrome;
 
-const storageGet = (keys) =>
-  new Promise((resolve) => {
+function storageGet(keys) {
+  return new Promise((resolve) => {
     try {
       const fn = API.storage?.sync?.get;
       if (!fn) return resolve({});
       if (fn.length > 1) fn.call(API.storage.sync, keys, resolve);
-      else { Promise.resolve(fn.call(API.storage.sync, keys)).then(resolve); }
+      else Promise.resolve(fn.call(API.storage.sync, keys)).then(resolve);
     } catch { resolve({}); }
   });
-
-const storageSet = (items) =>
-  new Promise((resolve) => {
+}
+function storageSet(items) {
+  return new Promise((resolve) => {
     try {
       const fn = API.storage?.sync?.set;
       if (!fn) return resolve();
       if (fn.length > 1) fn.call(API.storage.sync, items, resolve);
-      else { Promise.resolve(fn.call(API.storage.sync, items)).then(resolve); }
+      else Promise.resolve(fn.call(API.storage.sync, items)).then(resolve);
     } catch { resolve(); }
   });
-
-// Fallback de semilla si no está definida en otro archivo
-const DEFAULT_TRUSTED_ETLD1_SEED = (globalThis.DEFAULT_TRUSTED_ETLD1 || [
-  "viabcp.com","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.pe",
-  "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe",
-  "cajaarequipa.pe","cajahuancayo.com.pe","cajapiura.pe","cajasullana.pe","cajatrujillo.pe"
-]);
-
-const ta = document.getElementById("list");
-const strictModeEl = document.getElementById("strictMode");
-const kindEls = Array.from(document.querySelectorAll(".strictKind"));
-const savedLabel = document.getElementById("saved");
-const savedStrict = document.getElementById("savedStrict");
-const dniOnlyFinancialEl = document.getElementById("dniOnlyFinancial");
-const savedBehavior = document.getElementById("savedBehavior");
-
-const DEFAULT_STRICT_MODE = true;
-const DEFAULT_STRICT_BLOCK_KINDS = ["card","cvv","expiry","cci"];
-const DEFAULT_DNI_ONLY_FINANCIAL = true;
-
-async function load() {
-  const { trustedETLD1 } = await storageGet("trustedETLD1");
-  const list = Array.isArray(trustedETLD1) && trustedETLD1.length ? trustedETLD1 : DEFAULT_TRUSTED_ETLD1_SEED;
-  ta.value = list.join("\n");
-
-  const { strictMode, strictBlockKinds, dniOnlyFinancial } = await storageGet(["strictMode", "strictBlockKinds", "dniOnlyFinancial"]);
-  strictModeEl.checked = typeof strictMode === "boolean" ? strictMode : DEFAULT_STRICT_MODE;
-
-  const kinds = Array.isArray(strictBlockKinds) && strictBlockKinds.length ? strictBlockKinds : DEFAULT_STRICT_BLOCK_KINDS;
-  kindEls.forEach(el => el.checked = kinds.includes(el.value));
-
-  dniOnlyFinancialEl.checked = typeof dniOnlyFinancial === "boolean" ? dniOnlyFinancial : DEFAULT_DNI_ONLY_FINANCIAL;
 }
-load();
 
-document.getElementById("save").onclick = async () => {
-  const lines = ta.value.split("\n").map(s => s.trim().toLowerCase()).filter(Boolean);
-  await storageSet({ trustedETLD1: Array.from(new Set(lines)) });
-  savedLabel.textContent = "Guardado."; setTimeout(()=>savedLabel.textContent="",1500);
-};
-document.getElementById("reset").onclick = async () => {
-  await storageSet({ trustedETLD1: DEFAULT_TRUSTED_ETLD1_SEED });
-  await load();
-  savedLabel.textContent = "Restablecido."; setTimeout(()=>savedLabel.textContent="",1500);
-};
-document.getElementById("saveStrict").onclick = async () => {
-  const kinds = kindEls.filter(el => el.checked).map(el => el.value);
-  await storageSet({
-    strictMode: strictModeEl.checked,
-    strictBlockKinds: kinds.length ? kinds : DEFAULT_STRICT_BLOCK_KINDS
+function chip(text) {
+  const s = document.createElement("span");
+  s.className = "chip";
+  s.textContent = text;
+  return s;
+}
+
+async function loadLists() {
+  const resp = await new Promise((resolve) => {
+    try {
+      API.runtime.sendMessage({ type: "GET_TRUST_LISTS" }, (res) => resolve(res));
+    } catch { resolve(null); }
   });
-  savedStrict.textContent = "Guardado."; setTimeout(()=>savedStrict.textContent="",1500);
-};
-document.getElementById("saveBehavior").onclick = async () => {
-  await storageSet({ dniOnlyFinancial: dniOnlyFinancialEl.checked });
-  savedBehavior.textContent = "Guardado."; setTimeout(()=>savedBehavior.textContent="",1500);
-};
+
+  if (!resp || resp.type !== "GET_TRUST_LISTS_OK") return;
+
+  const { baseD, baseS, userD, userS } = resp.payload || {};
+
+  // Render base chips
+  const baseDomainsChips = document.getElementById("baseDomainsChips");
+  baseDomainsChips.innerHTML = "";
+  (baseD || []).forEach(d => baseDomainsChips.appendChild(chip(d)));
+
+  const baseSuffixesChips = document.getElementById("baseSuffixesChips");
+  baseSuffixesChips.innerHTML = "";
+  (baseS || []).forEach(s => baseSuffixesChips.appendChild(chip(s)));
+
+  // Render textareas (user)
+  const userDomains = document.getElementById("userDomains");
+  userDomains.value = (userD || []).join("\n");
+
+  const userSuffixes = document.getElementById("userSuffixes");
+  userSuffixes.value = (userS || []).join("\n");
+}
+
+function sanitizeLines(val) {
+  return Array.from(new Set(
+    (val || "")
+      .split(/\r?\n/)
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+  ));
+}
+
+async function saveUserDomains() {
+  const list = sanitizeLines(document.getElementById("userDomains").value);
+  await storageSet({ userTrustedETLD1: list });
+  document.getElementById("userDomainsMsg").textContent = "Guardado.";
+  setTimeout(() => document.getElementById("userDomainsMsg").textContent = "", 1500);
+}
+async function clearUserDomains() {
+  await storageSet({ userTrustedETLD1: [] });
+  document.getElementById("userDomains").value = "";
+  document.getElementById("userDomainsMsg").textContent = "Limpio.";
+  setTimeout(() => document.getElementById("userDomainsMsg").textContent = "", 1500);
+}
+
+async function saveUserSuffixes() {
+  const list = sanitizeLines(document.getElementById("userSuffixes").value);
+  await storageSet({ userTrustedSuffixes: list });
+  document.getElementById("userSuffixesMsg").textContent = "Guardado.";
+  setTimeout(() => document.getElementById("userSuffixesMsg").textContent = "", 1500);
+}
+async function clearUserSuffixes() {
+  await storageSet({ userTrustedSuffixes: [] });
+  document.getElementById("userSuffixes").value = "";
+  document.getElementById("userSuffixesMsg").textContent = "Limpio.";
+  setTimeout(() => document.getElementById("userSuffixesMsg").textContent = "", 1500);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadLists().catch(()=>{});
+  document.getElementById("saveUserDomains").onclick = saveUserDomains;
+  document.getElementById("clearUserDomains").onclick = clearUserDomains;
+  document.getElementById("saveUserSuffixes").onclick = saveUserSuffixes;
+  document.getElementById("clearUserSuffixes").onclick = clearUserSuffixes;
+});
