@@ -33,7 +33,7 @@ jobs:
           echo "Firefox: $FIREFOX"
           echo "Safari:  $SAFARI"
           test "$CHROME" = "$FIREFOX" -a "$CHROME" = "$SAFARI" \
-            || (echo "❌ Las versiones de manifests no coinciden" && exit 1)
+            || (echo "Las versiones de manifests no coinciden" && exit 1)
 
       - name: Make build.sh executable
         run: chmod +x ./build.sh
