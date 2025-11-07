@@ -41,9 +41,6 @@ La Extensión solicita ciertos permisos para poder cumplir con su única finalid
 * **`tabs`:**
     * **Propósito:** Necesario para tomar medidas de protección, como redirigir al usuario desde una página de phishing peligrosa a una página de advertencia segura (alojada dentro de la extensión).
 
-* **`scripting`:**
-    * **Propósito:** Se utiliza para inyectar una advertencia visual (ej. un banner rojo o un *overlay*) directamente sobre la página web fraudulenta, asegurando que el usuario vea el peligro.
-
 * **`notifications`:**
     * **Propósito:** Mostrar una alerta nativa del sistema para notificarle inmediatamente que se ha detectado y bloqueado un sitio de phishing.
 
