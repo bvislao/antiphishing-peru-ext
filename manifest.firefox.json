@@ -12,7 +12,7 @@
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "browser_specific_settings": {
     "gecko": {
-      "id": "antiphishing-peru@bvislao",
+      "id": "antiphishing-pe@bvislao",
       "strict_min_version": "109.0"
     }
   },
