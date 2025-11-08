@@ -12,6 +12,8 @@ COMMON_FILES=(
   "icon16.png"
   "icon48.png"
   "icon128.png"
+  "popup.html",
+  "popup.js",
   "README.md"
   "LICENSE"
 )
