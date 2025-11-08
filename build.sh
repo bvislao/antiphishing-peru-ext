@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ===== Config =====
 DIST_DIR="dist"
 
-# Archivos comunes (se copian solo si existen)
 COMMON_FILES=(
   "background.js"
   "content.js"
   "whitelist.js"
   "options.html"
   "options.js"
-  "popup.html"
-  "popup.js"
   "icon16.png"
   "icon48.png"
   "icon128.png"
@@ -20,7 +16,6 @@ COMMON_FILES=(
   "LICENSE"
 )
 
-# ===== Helpers =====
 copy_if_exists() {
   local src="$1"
   local dst="$2"
@@ -37,11 +32,9 @@ copy_common() {
   done
 }
 
-# Detecta versión desde manifest.chrome.json (fallback 0.0.0)
 detect_version() {
   local mf="manifest.chrome.json"
   if [[ -f "$mf" ]]; then
-    # Extrae el primer "version": "X.Y.Z"
     local v
     v=$(grep -oE '"version"\s*:\s*"[^"]+"' "$mf" | head -n1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
     [[ -n "${v:-}" ]] && echo "$v" && return 0
@@ -55,14 +48,13 @@ zip_dir() {
   ( cd "$src_dir" && zip -qr "../$zip_path" . )
 }
 
-# ===== Build =====
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
 VERSION="$(detect_version)"
 echo "Versión detectada: $VERSION"
 
-# --- Chrome ---
+# Chrome
 echo "Empaquetando Chrome..."
 CHROME_DIR="$DIST_DIR/chrome"
 mkdir -p "$CHROME_DIR"
@@ -70,7 +62,7 @@ copy_common "$CHROME_DIR"
 cp manifest.chrome.json "$CHROME_DIR/manifest.json"
 zip_dir "$CHROME_DIR" "antiphishing-peru-chrome-v$VERSION.zip"
 
-# --- Firefox ---
+# Firefox
 echo "Empaquetando Firefox..."
 FIREFOX_DIR="$DIST_DIR/firefox"
 mkdir -p "$FIREFOX_DIR"
@@ -78,29 +70,28 @@ copy_common "$FIREFOX_DIR"
 cp manifest.firefox.json "$FIREFOX_DIR/manifest.json"
 zip_dir "$FIREFOX_DIR" "antiphishing-peru-firefox-v$VERSION.zip"
 
-# --- Safari (fuente para Xcode) ---
-echo "Empaquetando Safari (fuente para converter de Xcode)..."
+# Safari (fuente para Xcode)
+echo "Empaquetando Safari (src para Xcode)..."
 SAFARI_DIR="$DIST_DIR/safari-src"
 mkdir -p "$SAFARI_DIR"
 copy_common "$SAFARI_DIR"
 cp manifest.safari.json "$SAFARI_DIR/manifest.json"
 zip_dir "$SAFARI_DIR" "antiphishing-peru-safari-src-v$VERSION.zip"
 
-echo "Archivos generados:"
-echo " - $DIST_DIR/antiphishing-peru-chrome-v$VERSION.zip"
-echo " - $DIST_DIR/antiphishing-peru-firefox-v$VERSION.zip"
-echo " - $DIST_DIR/antiphishing-peru-safari-src-v$VERSION.zip"
+echo "✅ Listo:"
+echo " - dist/antiphishing-peru-chrome-v$VERSION.zip"
+echo " - dist/antiphishing-peru-firefox-v$VERSION.zip"
+echo " - dist/antiphishing-peru-safari-src-v$VERSION.zip"
 
-# Tips Safari:
 cat <<'TIP'
 
 Para Safari:
-1) Descomprime antiphishing-peru-safari-src-*.zip
-2) En macOS, ejecuta:
+1) Descomprime el ZIP safari-src
+2) Ejecuta en macOS:
    xcrun safari-web-extension-converter RUTA/DE/CARPETA \
      --project-location ./SafariProject \
      --app-name "Anti-Phishing Perú" \
      --force
-3) Abre el proyecto en Xcode, habilita los targets (macOS/iOS), firma y ejecuta.
+3) Abre en Xcode, firma y ejecuta en macOS/iOS.
 
 TIP

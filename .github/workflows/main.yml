@@ -2,17 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
-    tags-ignore: [ 'v*' ]   # evita correr cuando pusheas tags de release
+    branches: [ "**" ]
+    tags-ignore: [ "v*" ]   # evitamos correr CI en tags de release
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ci-build:
+  validate-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,24 +24,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq zip
 
-      - name: Check manifest versions match
+      - name: Check manifests exist
+        run: |
+          test -f manifest.chrome.json || (echo "Falta manifest.chrome.json" && exit 1)
+          test -f manifest.firefox.json || (echo "Falta manifest.firefox.json" && exit 1)
+          test -f manifest.safari.json || (echo "Falta manifest.safari.json" && exit 1)
+
+      - name: Verify manifest versions match
         run: |
           CHROME=$(jq -r '.version' manifest.chrome.json)
           FIREFOX=$(jq -r '.version' manifest.firefox.json)
           SAFARI=$(jq -r '.version' manifest.safari.json)
-          echo "Chrome:  $CHROME"
-          echo "Firefox: $FIREFOX"
-          echo "Safari:  $SAFARI"
-          test "$CHROME" = "$FIREFOX" -a "$CHROME" = "$SAFARI" \
-            || (echo "Las versiones de manifests no coinciden" && exit 1)
+          echo "::notice::Chrome=$CHROME  Firefox=$FIREFOX  Safari=$SAFARI"
+          if [[ "$CHROME" != "$FIREFOX" || "$CHROME" != "$SAFARI" ]]; then
+            echo "❌ Las versiones de los manifests no coinciden."
+            exit 1
+          fi
 
       - name: Make build.sh executable
         run: chmod +x ./build.sh
 
-      - name: Build (no release)
+      - name: Build packages (no release)
         run: ./build.sh
 
-      - name: Upload artifacts
+      - name: Upload artifacts (ZIPs)
         uses: actions/upload-artifact@v4
         with:
           name: bundles-${{ github.sha }}

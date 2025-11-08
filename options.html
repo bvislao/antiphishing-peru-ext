@@ -20,17 +20,56 @@
     .chips{display:flex; gap:8px; flex-wrap: wrap; margin-top:8px}
     .chip{border:1px solid #e3e9f0; padding:6px 10px; border-radius:999px; font-size:12px; background:#f8fafc}
     .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px}
+    .grid2{display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:10px}
+    .switch{display:flex; gap:8px; align-items:center}
   </style>
 </head>
 <body>
   <h1>Anti-Phishing Perú — Opciones</h1>
-  <p class="muted">Administra tus listas de confianza. Lo que agregues aquí no mostrará alertas en esos dominios.</p>
+  <p class="muted">Administra tus listas de confianza y el Modo Estricto.</p>
 
-  <div class="row">
+  <div class="card">
+    <h2>Modo Estricto</h2>
+    <div class="switch">
+      <input type="checkbox" id="strictMode">
+      <label for="strictMode"><strong>Activar Modo Estricto</strong> (bloquea campos sensibles en sitios no confiables)</label>
+    </div>
+
+    <h3 style="margin-top:12px;font-size:14px;">¿Qué datos detectar/leer?</h3>
+    <div class="grid2">
+      <label><input type="checkbox" id="ek_card"> Nº de Tarjeta</label>
+      <label><input type="checkbox" id="ek_cvv"> CVV</label>
+      <label><input type="checkbox" id="ek_expiry"> Fecha de vencimiento</label>
+      <label><input type="checkbox" id="ek_dni"> DNI</label>
+      <label><input type="checkbox" id="ek_cci"> CCI</label>
+    </div>
+
+    <h3 style="margin-top:12px;font-size:14px;">¿Qué bloquear en Modo Estricto?</h3>
+    <div class="grid2">
+      <label><input type="checkbox" class="sb" value="card"> Nº de Tarjeta</label>
+      <label><input type="checkbox" class="sb" value="cvv"> CVV</label>
+      <label><input type="checkbox" class="sb" value="expiry"> Fecha de vencimiento</label>
+      <label><input type="checkbox" class="sb" value="dni"> DNI</label>
+      <label><input type="checkbox" class="sb" value="cci"> CCI</label>
+    </div>
+
+    <div class="switch" style="margin-top:10px">
+      <input type="checkbox" id="dniOnlyFinancial">
+      <label for="dniOnlyFinancial">Considerar <strong>DNI</strong> esperable en dominios públicos (gob/edu)</label>
+    </div>
+
+    <div class="actions">
+      <button id="saveSettings" class="primary">Guardar</button>
+      <button id="resetSettings">Restablecer</button>
+      <span id="settingsMsg" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
     <div class="col card">
       <h2>Dominios confiables — Base (solo lectura)</h2>
       <div id="baseDomainsChips" class="chips"></div>
-      <div class="hint">Estos vienen preconfigurados (bancos, plataformas conocidas). Puedes extender abajo.</div>
+      <div class="hint">Preconfigurados (bancos, plataformas conocidas). Extiende abajo si lo necesitas.</div>
     </div>
 
     <div class="col card">
@@ -62,12 +101,14 @@
     </div>
   </div>
 
-  <div class="footer">
+ <div class="footer">
     © 2025 bvislao • <a href="https://bvislao.me" target="_blank" rel="noopener">bvislao.me</a> <br />
-    • Código: <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener">GitHub</a>
+    • Código: <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener">GitHub</a> <br />
     <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
   </div>
 
   <script src="options.js"></script>
 </body>
 </html>
+
+  

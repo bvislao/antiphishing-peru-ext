@@ -1,11 +1,9 @@
 // =========================
 // Anti-Phishing Perú — background.js (cross-browser)
-// Con: dominios/sufijos confiables y acciones del usuario (añadir/quitar)
 // =========================
-
 const API = (typeof globalThis.browser !== "undefined") ? globalThis.browser : globalThis.chrome;
 
-// ---- Utils de Storage (compat callbacks/promesas) ----
+// ---- Storage helpers ----
 const storageGet = (keys) => new Promise((resolve) => {
   try {
     const fn = API.storage?.sync?.get;
@@ -23,6 +21,7 @@ const storageSet = (items) => new Promise((resolve) => {
   } catch { resolve(); }
 });
 
+// ---- Notificaciones (no todas las plataformas soportan) ----
 const canNotify = !!(API && API.notifications && API.notifications.create);
 const notify = async ({ title, message }) => {
   if (!canNotify) return false;
@@ -43,7 +42,7 @@ const notify = async ({ title, message }) => {
   });
 };
 
-// ---- Semillas (si whitelist.js no cargó) ----
+// ---- Defaults (si whitelist.js no cargó) ----
 const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
   "bcp.com.pe","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.pe",
   "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe",
@@ -57,7 +56,15 @@ const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
 ];
 const DEFAULT_TRUSTED_SUFFIXES_FALLBACK = globalThis.DEFAULT_TRUSTED_SUFFIXES || ["gob.pe","edu.pe"];
 
-// ---- Helpers dominio ----
+// ---- SETTINGS por defecto ----
+const SETTINGS_DEFAULT = {
+  strictMode: false,
+  enabledKinds: { card:true, cvv:true, expiry:true, dni:true, cci:true },
+  strictBlockKinds: ["card","cvv","expiry","cci"],
+  dniOnlyFinancial: true
+};
+
+// ---- Helpers de dominio ----
 const PUBLIC_SUFFIXES_PE = new Set(["pe","com.pe","org.pe","gob.pe","edu.pe","mil.pe","net.pe"]);
 function getETLD1(host) {
   const parts = (host || "").split(".").filter(Boolean);
@@ -80,7 +87,7 @@ function levenshtein(a,b){
   return m[a.length][b.length];
 }
 
-// ---- Carga de listas (base + usuario) ----
+// ---- Listas (base + usuario) ----
 async function getBaseDomains() {
   const { trustedETLD1 } = await storageGet(["trustedETLD1"]);
   if (Array.isArray(trustedETLD1) && trustedETLD1.length) return trustedETLD1;
@@ -109,7 +116,6 @@ async function getEffectiveLists() {
   const effS = Array.from(new Set([...baseS, ...userS]));
   return { baseD, baseS, userD, userS, effD, effS };
 }
-
 function isTrustedDomainOrSuffix(etld1, host, doms, sufx) {
   const h = (host||"").toLowerCase();
   const e = (etld1||"").toLowerCase();
@@ -120,7 +126,7 @@ function isTrustedDomainOrSuffix(etld1, host, doms, sufx) {
   });
 }
 
-// ---- Heurísticas varias ----
+// ---- Señales semánticas ----
 const FIN_BRANDS = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn","yape","plin","visa","mastercard","amex"];
 const FIN_TERMS  = [
   "banca","en linea","online banking","transferencia","pago","tarjeta","credito","préstamo","prestamo",
@@ -139,45 +145,46 @@ function financialIntentScore({ host, path, lexical = {}, sensitive = {} }) {
   return score;
 }
 
-// ---- Config por defecto ----
-const DEFAULT_STRICT_MODE = true;
-const DEFAULT_STRICT_BLOCK_KINDS = ["card","cvv","expiry","cci"];
-const DEFAULT_DNI_ONLY_FINANCIAL = true;
+// ---- SETTINGS ----
+async function getSettings() {
+  const s = await storageGet(["strictMode","enabledKinds","strictBlockKinds","dniOnlyFinancial"]);
+  return {
+    strictMode: (typeof s.strictMode === "boolean") ? s.strictMode : SETTINGS_DEFAULT.strictMode,
+    enabledKinds: { ...SETTINGS_DEFAULT.enabledKinds, ...(s.enabledKinds || {}) },
+    strictBlockKinds: Array.isArray(s.strictBlockKinds) ? s.strictBlockKinds : SETTINGS_DEFAULT.strictBlockKinds,
+    dniOnlyFinancial: (typeof s.dniOnlyFinancial === "boolean") ? s.dniOnlyFinancial : SETTINGS_DEFAULT.dniOnlyFinancial
+  };
+}
+async function setSettings(next) {
+  const cur = await getSettings();
+  const upd = { ...cur, ...(next || {}) };
+  await storageSet(upd);
+  return upd;
+}
 
-// ---- Evaluación principal ----
+// ---- Evaluación ----
 async function assessRisk(url, pageHints = {}, senderTabId = null) {
   const u = new URL(url);
   const host = u.hostname.toLowerCase();
   const scheme = u.protocol.replace(":", "");
   const etld1 = getETLD1(host);
 
-  const { effD, effS } = await getEffectiveLists();
+  const [{ effD, effS }, settings] = await Promise.all([getEffectiveLists(), getSettings()]);
   const isTrusted = isTrustedDomainOrSuffix(etld1, host, effD, effS);
 
-  // Si el usuario/base marcó como confiable: no alertar (nivel BAJO forzado)
   if (isTrusted) {
-    try {
-      if (senderTabId && API.action?.setBadgeText) {
-        API.action.setBadgeText({ tabId: senderTabId, text: "" });
-      }
-    } catch {}
-    return { level: "BAJO", risk: 0, reasons: ["Dominio marcado como confiable."], etld1, isTrusted: true };
+    try { if (senderTabId && API.action?.setBadgeText) API.action.setBadgeText({ tabId: senderTabId, text: "" }); } catch {}
+    return { level: "BAJO", risk: 0, reasons: ["Dominio marcado como confiable."], etld1, isTrusted: true, settings };
   }
 
   let risk = 0; const reasons = [];
-
   if (isIPAddress(host)) { risk += 2; reasons.push("La URL usa una IP en lugar de dominio."); }
   if (scheme !== "https") { risk += 2; reasons.push("Conexión sin HTTPS."); }
   if (host.includes("xn--")) { risk += 2; reasons.push("Dominio con punycode (posible homógrafo)."); }
-  const hyphens = (host.match(/-/g) || []).length;
-  if (hyphens >= 3) { risk += 1; reasons.push("Dominio con muchos guiones."); }
+  const hyphens = (host.match(/-/g) || []).length; if (hyphens >= 3) { risk += 1; reasons.push("Dominio con muchos guiones."); }
 
-  // Look-alike con dominios base (no confiables)
   let minDist = Infinity, closest = null;
-  for (const t of effD) {
-    const d = levenshtein(etld1, t);
-    if (d < minDist) { minDist = d; closest = t; }
-  }
+  for (const t of effD) { const d = levenshtein(etld1, t); if (d < minDist) { minDist = d; closest = t; } }
   if (minDist <= 2) { risk += 2; reasons.push(`Dominio muy parecido a “${closest}” (${etld1}).`); }
 
   const brandKeys = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn"];
@@ -187,10 +194,8 @@ async function assessRisk(url, pageHints = {}, senderTabId = null) {
 
   if (Array.isArray(pageHints.forms)) {
     const badActs = pageHints.forms.filter(a => {
-      try {
-        const au = new URL(a, url);
-        return (au.protocol !== "https:" || getETLD1(au.hostname.toLowerCase()) !== etld1);
-      } catch { return true; }
+      try { const au = new URL(a, url); return (au.protocol !== "https:" || getETLD1(au.hostname.toLowerCase()) !== etld1); }
+      catch { return true; }
     });
     if (badActs.length) { risk += 2; reasons.push("Formularios que envían datos a otro dominio o sin HTTPS."); }
   }
@@ -200,7 +205,6 @@ async function assessRisk(url, pageHints = {}, senderTabId = null) {
   if (totalSensitive > 0) {
     const intent = financialIntentScore({ host, path: u.pathname || "", lexical: pageHints.lexical || {}, sensitive: s });
     const hasCardLike = (s.card||0) + (s.cci||0) + (s.expiry||0) + (s.cvv||0) > 0;
-
     if (hasCardLike || intent >= 2) {
       const highWeight = (s.card||0) + (s.cvv||0) > 0 ? 4 : 3;
       risk += highWeight;
@@ -211,20 +215,15 @@ async function assessRisk(url, pageHints = {}, senderTabId = null) {
   }
 
   let level = "BAJO";
-  if (risk >= 5) level = "ALTO";
-  else if (risk >= 2) level = "MEDIO";
+  if (risk >= 5) level = "ALTO"; else if (risk >= 2) level = "MEDIO";
 
-  // Badge y notificación
   try {
     const tabId = senderTabId;
     if (tabId && API.action?.setBadgeText) {
       const badge = level === "ALTO" ? "!!" : level === "MEDIO" ? "!" : "";
       API.action.setBadgeText({ tabId, text: badge });
       if (API.action?.setBadgeBackgroundColor) {
-        API.action.setBadgeBackgroundColor({
-          tabId,
-          color: level === "ALTO" ? [255,0,0,255] : level === "MEDIO" ? [255,165,0,255] : [0,0,0,0]
-        });
+        API.action.setBadgeBackgroundColor({ tabId, color: (level === "ALTO" ? [255,0,0,255] : level === "MEDIO" ? [255,165,0,255] : [0,0,0,0]) });
       }
     }
   } catch {}
@@ -232,17 +231,13 @@ async function assessRisk(url, pageHints = {}, senderTabId = null) {
   if (level === "ALTO" && canNotify) {
     try { await notify({ title: "⚠️ Posible phishing detectado", message: reasons.slice(0,2).join(" • ") }); } catch {}
   }
-
-  return { level, risk, reasons, etld1, isTrusted: false };
+  return { level, risk, reasons, etld1, isTrusted: false, settings };
 }
 
-// ---- Acciones usuario: añadir/quitar confianza ----
+// ---- Acciones de confianza + Settings API ----
 async function addUserTrustedDomain(etld1) {
   const { userTrustedETLD1 = [] } = await storageGet(["userTrustedETLD1"]);
-  if (!userTrustedETLD1.includes(etld1)) {
-    userTrustedETLD1.push(etld1);
-    await storageSet({ userTrustedETLD1 });
-  }
+  if (!userTrustedETLD1.includes(etld1)) { userTrustedETLD1.push(etld1); await storageSet({ userTrustedETLD1 }); }
   return userTrustedETLD1;
 }
 async function removeUserTrustedDomain(etld1) {
@@ -252,7 +247,6 @@ async function removeUserTrustedDomain(etld1) {
   return next;
 }
 
-// ---- Mensajería ----
 API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
@@ -261,27 +255,21 @@ API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const tabId = sender?.tab?.id || null;
         const res = await assessRisk(url, hints || {}, tabId);
         sendResponse({ type: "RISK_RESULT", payload: res });
-      }
-      else if (msg?.type === "USER_TRUST_DOMAIN_ADD") {
+      } else if (msg?.type === "USER_TRUST_DOMAIN_ADD") {
         const { url } = msg.payload || {};
-        const u = new URL(url);
-        const etld1 = getETLD1(u.hostname.toLowerCase());
+        const u = new URL(url); const etld1 = getETLD1(u.hostname.toLowerCase());
         await addUserTrustedDomain(etld1);
         sendResponse({ type: "USER_TRUST_DOMAIN_ADD_OK", payload: { etld1 } });
-      }
-      else if (msg?.type === "USER_TRUST_DOMAIN_REMOVE") {
+      } else if (msg?.type === "USER_TRUST_DOMAIN_REMOVE") {
         const { url, etld1: e } = msg.payload || {};
         const etld1 = e || (url ? getETLD1(new URL(url).hostname.toLowerCase()) : "");
         if (!etld1) throw new Error("Sin etld1");
         await removeUserTrustedDomain(etld1);
         sendResponse({ type: "USER_TRUST_DOMAIN_REMOVE_OK", payload: { etld1 } });
-      }
-      else if (msg?.type === "GET_TRUST_LISTS") {
+      } else if (msg?.type === "GET_TRUST_LISTS") {
         const { baseD, baseS, userD, userS, effD, effS } = await getEffectiveLists();
         sendResponse({ type: "GET_TRUST_LISTS_OK", payload: { baseD, baseS, userD, userS, effD, effS } });
-      }
-      else if (msg?.type === "SET_TRUST_LISTS") {
-        // Permite actualizar listas base y usuario desde Options (campos opcionales)
+      } else if (msg?.type === "SET_TRUST_LISTS") {
         const { trustedETLD1, trustedSuffixes, userTrustedETLD1, userTrustedSuffixes } = msg.payload || {};
         if (Array.isArray(trustedETLD1)) await storageSet({ trustedETLD1 });
         if (Array.isArray(trustedSuffixes)) await storageSet({ trustedSuffixes });
@@ -289,6 +277,12 @@ API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (Array.isArray(userTrustedSuffixes)) await storageSet({ userTrustedSuffixes });
         const lists = await getEffectiveLists();
         sendResponse({ type: "SET_TRUST_LISTS_OK", payload: lists });
+      } else if (msg?.type === "GET_SETTINGS") {
+        const settings = await getSettings();
+        sendResponse({ type: "GET_SETTINGS_OK", payload: settings });
+      } else if (msg?.type === "SET_SETTINGS") {
+        const settings = await setSettings(msg.payload || {});
+        sendResponse({ type: "SET_SETTINGS_OK", payload: settings });
       }
     } catch (e) {
       sendResponse({ type: "ERROR", error: String(e) });

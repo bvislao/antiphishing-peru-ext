@@ -4,8 +4,17 @@
 (function () {
   const X = (typeof globalThis.browser !== "undefined") ? globalThis.browser : globalThis.chrome;
   const url = location.href;
+
+  // SETTINGS efectivos (se piden al background)
+  let SETTINGS = {
+    strictMode: false,
+    enabledKinds: { card:true, cvv:true, expiry:true, dni:true, cci:true },
+    strictBlockKinds: ["card","cvv","expiry","cci"],
+    dniOnlyFinancial: true
+  };
+
+  // Desbloqueo temporal (10 min) del modo estricto
   let strictUnlockUntil = 0;
-  let lastStrictKinds = ["card","cvv","expiry","cci"]; // puedes cambiar vía Options
 
   // --- Léxico financiero
   const FIN_BRANDS = ["bcp","interbank","bbva","scotiabank","banbif","mibanco","pichincha","falabella","ripley","bn","yape","plin","visa","mastercard","amex"];
@@ -17,6 +26,48 @@
 
   const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/\p{Diacritic}/gu, "");
   const isNumLike = (el) => ["tel","number","text","password","search"].includes(el.type || "") || !el.type;
+
+  // ---- Pill CSS (sin permisos extra)
+  function ensurePillStyles(){
+    if (document.getElementById("__ap_pill_css")) return;
+    const style = document.createElement("style");
+    style.id = "__ap_pill_css";
+    style.textContent = `
+      .__ap-pill-wrap{ position: relative !important; display:inline-block; max-width:100%; }
+      .__ap-pill{
+        position:absolute; top:-10px; right:-10px; z-index:2147483647;
+        background:#fff2f2; border:1px solid #ff6b6b; color:#b10000;
+        font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        padding:4px 8px; border-radius:999px; cursor:default;
+        box-shadow:0 4px 12px rgba(0,0,0,.08);
+      }
+      .__ap-pill[data-tip]:hover::after{
+        content: attr(data-tip);
+        position:absolute; right:0; top:100%; margin-top:6px; white-space:nowrap;
+        background:#111; color:#fff; padding:6px 8px; border-radius:8px; font-size:12px;
+        box-shadow:0 6px 18px rgba(0,0,0,.2);
+      }
+    `;
+    document.documentElement.appendChild(style);
+  }
+  function addPill(el, text, tip){
+    ensurePillStyles();
+    const wrap = el.closest(".__ap-pill-wrap") || (()=>{
+      const w = document.createElement("span");
+      w.className="__ap-pill-wrap";
+      el.parentNode?.insertBefore(w, el);
+      w.appendChild(el);
+      return w;
+    })();
+    let pill = wrap.querySelector(".__ap-pill");
+    if(!pill){
+      pill = document.createElement("span");
+      pill.className="__ap-pill";
+      wrap.appendChild(pill);
+    }
+    pill.textContent = text || "Bloqueado";
+    if (tip) pill.setAttribute("data-tip", tip); else pill.removeAttribute("data-tip");
+  }
 
   function labelTextFor(input) {
     try {
@@ -86,7 +137,7 @@
         if (/\d{13,19}/.test(v) && luhnValid(v)) kind = "card";
         if (/^\d{3,4}$/.test(v) && /cvv|cvc|seguridad/i.test(lbl)) kind = "cvv";
       }
-      if (kind) {
+      if (kind && SETTINGS.enabledKinds[kind] !== false) {
         counts[kind]++;
         details.push({ type: kind, name: el.name || "", id: el.id || "", label: (lbl || "").slice(0, 80) });
       }
@@ -117,17 +168,43 @@
     return { forms, hasPasswordFields, sensitive, lexical };
   }
 
-  function send() {
-    try {
-      X.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
-        if (!res || (res.type !== "RISK_RESULT")) return;
-        const { level, reasons, isTrusted, etld1 } = res.payload || {};
-        if (level === "MEDIO" || level === "ALTO") {
-          showBanner(level, reasons, !!isTrusted, etld1 || "");
-          beep(level);
-        }
-      });
-    } catch {}
+  // ---- Strict block helpers ----
+  function markBlocked(el) {
+    el.dataset.__ap_blocked = "1";
+    el.readOnly = true;
+    el.style.outline = "2px dashed #ff6b6b";
+    el.style.background = "#fff2f2";
+    el.title = "Protegido por Anti-Phishing Perú (Modo Estricto)";
+    addPill(el, "Bloqueado", "Modo Estricto activo en sitios no confiables");
+    ["keypress","keydown","beforeinput","input","paste"].forEach(ev=>{
+      el.addEventListener(ev,(e)=>{
+        if (Date.now() < strictUnlockUntil) return;
+        if (el.dataset.__ap_blocked === "1"){ e.preventDefault?.(); e.stopImmediatePropagation?.(); el.blur(); }
+      },{capture:true, passive:false});
+    });
+  }
+  function unmarkBlocked(el){
+    if (el.dataset.__ap_blocked !== "1") return;
+    el.readOnly = false;
+    el.style.outline = ""; el.style.background = ""; el.title = "";
+    delete el.dataset.__ap_blocked;
+    const wrap = el.closest(".__ap-pill-wrap");
+    if (wrap){
+      const pill = wrap.querySelector(".__ap-pill"); if (pill) pill.remove();
+      if (wrap.childElementCount === 1) { wrap.parentNode?.insertBefore(el, wrap); wrap.remove(); }
+    }
+  }
+  function applyStrictBlock(kinds) {
+    const want = new Set(kinds || []);
+    const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
+    for (const el of inputs) {
+      const lbl = labelTextFor(el);
+      const k = classifySensitiveByText(lbl, el);
+      if (k && want.has(k)) markBlocked(el);
+    }
+  }
+  function removeStrictBlock() {
+    document.querySelectorAll("[data-__ap_blocked='1']").forEach(unmarkBlocked);
   }
 
   // ---- UI alerta ----
@@ -137,8 +214,7 @@
     if (document.getElementById("__anti_phishing_banner")) return;
     const wrap = document.createElement("div");
     wrap.id = "__anti_phishing_banner";
-    wrap.style.position = "fixed";
-    wrap.style.zIndex = 2147483647;
+    wrap.style.position = "fixed"; wrap.style.zIndex = 2147483647;
     wrap.style.left = "16px"; wrap.style.right = "16px"; wrap.style.top = "16px";
     wrap.style.padding = "12px 16px"; wrap.style.borderRadius = "12px";
     wrap.style.boxShadow = "0 8px 24px rgba(0,0,0,.2)";
@@ -156,7 +232,8 @@
     (reasons || []).slice(0, 3).forEach(r => { const li = document.createElement("li"); li.textContent = r; list.appendChild(li); });
 
     const row = document.createElement("div");
-    row.style.display = "flex"; row.style.gap = "8px"; row.style.marginTop = "10px";
+    row.style.display = "flex"; row.style.gap = "8px"; row.style.flexWrap = "wrap";
+    row.style.marginTop = "10px";
 
     const btnMore = document.createElement("button");
     btnMore.textContent = "Más info";
@@ -168,7 +245,6 @@
     Object.assign(btnClose.style, baseBtn());
     btnClose.onclick = () => wrap.remove();
 
-    // Toggle confiar / quitar confianza
     const btnToggle = document.createElement("button");
     Object.assign(btnToggle.style, baseBtn());
     btnToggle.style.borderColor = isTrusted ? "#999" : "#5dc08f";
@@ -176,11 +252,7 @@
 
     btnToggle.onclick = () => {
       if (!isTrusted) {
-        const ok = confirm(
-          "Vas a añadir este dominio a tu lista de sitios confiables.\n" +
-          "Úsalo solo si estás 100% seguro. Esta acción ocultará futuras alertas para este dominio.\n\n" +
-          "¿Continuar bajo tu responsabilidad?"
-        );
+        const ok = confirm("Añadir dominio a tu lista de confianza. Úsalo solo si estás 100% seguro. ¿Continuar?");
         if (!ok) return;
         X.runtime.sendMessage({ type: "USER_TRUST_DOMAIN_ADD", payload: { url: location.href } }, (res) => {
           if (res && res.type === "USER_TRUST_DOMAIN_ADD_OK") {
@@ -190,12 +262,11 @@
             btnToggle.textContent = "Quitar de confianza";
             btnToggle.style.borderColor = "#999";
             isTrusted = true;
-          } else {
-            alert("No se pudo añadir. Verifica el background.");
-          }
+            removeStrictBlock();
+          } else { alert("No se pudo añadir. Verifica el background."); }
         });
       } else {
-        const ok = confirm("Quitarás este dominio de tu lista de confianza. ¿Deseas continuar?");
+        const ok = confirm("Quitar dominio de tu lista de confianza. ¿Continuar?");
         if (!ok) return;
         X.runtime.sendMessage({ type: "USER_TRUST_DOMAIN_REMOVE", payload: { url: location.href, etld1 } }, (res) => {
           if (res && res.type === "USER_TRUST_DOMAIN_REMOVE_OK") {
@@ -205,23 +276,31 @@
             btnToggle.textContent = "Confiar en este dominio";
             btnToggle.style.borderColor = "#5dc08f";
             isTrusted = false;
-          } else {
-            alert("No se pudo quitar. Verifica el background.");
-          }
+          } else { alert("No se pudo quitar. Verifica el background."); }
         });
       }
     };
 
-    // Orden botones
+    const btnUnlock = document.createElement("button");
+    btnUnlock.textContent = "Permitir 10 min";
+    Object.assign(btnUnlock.style, baseBtn());
+    btnUnlock.style.borderColor = "#888";
+    btnUnlock.onclick = () => {
+      strictUnlockUntil = Date.now() + 10*60*1000;
+      removeStrictBlock();
+      btnUnlock.disabled = true; btnUnlock.textContent = "Permitido (10 min)";
+    };
+
     row.appendChild(btnToggle);
     row.appendChild(btnMore);
+    row.appendChild(btnUnlock);
     row.appendChild(btnClose);
 
     const disclaimer = document.createElement("div");
     disclaimer.style.marginTop = "6px";
     disclaimer.style.fontSize = "12px";
     disclaimer.style.color = "#444";
-    disclaimer.textContent = "Añadir a confianza es bajo tu responsabilidad. Úsalo solo si estás 100% seguro.";
+    disclaimer.textContent = "Modo Estricto bloquea campos sensibles en sitios no confiables. Úsalo con criterio.";
 
     wrap.appendChild(title);
     wrap.appendChild(list);
@@ -240,9 +319,51 @@
     } catch {}
   }
 
-  // Ejecuta envíos (inicio + al cargar + pequeño delay)
-  try { send(); } catch {}
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => send());
-  else send();
-  setTimeout(() => { try { send(); } catch {} }, 1200);
+  // ---- Main ----
+  async function fetchSettings() {
+    try {
+      const res = await new Promise((resolve)=> { X.runtime.sendMessage({ type:"GET_SETTINGS" }, (r)=> resolve(r)); });
+      if (res && res.type === "GET_SETTINGS_OK") { SETTINGS = { ...SETTINGS, ...(res.payload||{}) }; }
+    } catch {}
+  }
+
+  function send() {
+    try {
+      X.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints: collectPageHints() } }, (res) => {
+        if (!res || (res.type !== "RISK_RESULT")) return;
+        const { level, reasons, isTrusted, etld1, settings } = res.payload || {};
+        if (settings) SETTINGS = { ...SETTINGS, ...settings };
+        if (SETTINGS.strictMode && !isTrusted && Date.now() >= strictUnlockUntil) {
+          applyStrictBlock(SETTINGS.strictBlockKinds || []);
+        }
+        if (level === "MEDIO" || level === "ALTO") {
+          showBanner(level, reasons, !!isTrusted, etld1 || "");
+          beep(level);
+        }
+      });
+    } catch {}
+  }
+
+  (async () => {
+    await fetchSettings();
+    send();
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => send());
+    else send();
+    setTimeout(() => { try { send(); } catch {} }, 1200);
+  })();
+
+  // ---- Mini-hook para el popup: colecta + evalúa
+  try {
+    X.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg && msg.type === "POPUP_COLLECT_AND_ASSESS") {
+        const hints = collectPageHints();
+        const url = location.href;
+        X.runtime.sendMessage({ type:"PAGE_HINTS", payload:{ url, hints } }, (res) => {
+          sendResponse(res);
+        });
+        return true; // respuesta async
+      }
+    });
+  } catch {}
+
 })();

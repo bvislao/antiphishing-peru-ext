@@ -30,19 +30,24 @@ function chip(text) {
   s.textContent = text;
   return s;
 }
+function sanitizeLines(val) {
+  return Array.from(new Set(
+    (val || "")
+      .split(/\r?\n/)
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+  ));
+}
 
-async function loadLists() {
+// ---- TRUST LISTS ----
+async function loadTrustLists() {
   const resp = await new Promise((resolve) => {
-    try {
-      API.runtime.sendMessage({ type: "GET_TRUST_LISTS" }, (res) => resolve(res));
-    } catch { resolve(null); }
+    try { API.runtime.sendMessage({ type: "GET_TRUST_LISTS" }, (res) => resolve(res)); }
+    catch { resolve(null); }
   });
-
   if (!resp || resp.type !== "GET_TRUST_LISTS_OK") return;
-
   const { baseD, baseS, userD, userS } = resp.payload || {};
 
-  // Render base chips
   const baseDomainsChips = document.getElementById("baseDomainsChips");
   baseDomainsChips.innerHTML = "";
   (baseD || []).forEach(d => baseDomainsChips.appendChild(chip(d)));
@@ -51,21 +56,8 @@ async function loadLists() {
   baseSuffixesChips.innerHTML = "";
   (baseS || []).forEach(s => baseSuffixesChips.appendChild(chip(s)));
 
-  // Render textareas (user)
-  const userDomains = document.getElementById("userDomains");
-  userDomains.value = (userD || []).join("\n");
-
-  const userSuffixes = document.getElementById("userSuffixes");
-  userSuffixes.value = (userS || []).join("\n");
-}
-
-function sanitizeLines(val) {
-  return Array.from(new Set(
-    (val || "")
-      .split(/\r?\n/)
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean)
-  ));
+  document.getElementById("userDomains").value = (userD || []).join("\n");
+  document.getElementById("userSuffixes").value = (userS || []).join("\n");
 }
 
 async function saveUserDomains() {
@@ -80,7 +72,6 @@ async function clearUserDomains() {
   document.getElementById("userDomainsMsg").textContent = "Limpio.";
   setTimeout(() => document.getElementById("userDomainsMsg").textContent = "", 1500);
 }
-
 async function saveUserSuffixes() {
   const list = sanitizeLines(document.getElementById("userSuffixes").value);
   await storageSet({ userTrustedSuffixes: list });
@@ -94,10 +85,84 @@ async function clearUserSuffixes() {
   setTimeout(() => document.getElementById("userSuffixesMsg").textContent = "", 1500);
 }
 
+// ---- SETTINGS (Modo Estricto) ----
+function getStrictBlockKindsFromUI() {
+  const vals = [];
+  document.querySelectorAll(".sb").forEach(cb => { if (cb.checked) vals.push(cb.value); });
+  return vals;
+}
+function setStrictBlockKindsToUI(list) {
+  const want = new Set(list || []);
+  document.querySelectorAll(".sb").forEach(cb => { cb.checked = want.has(cb.value); });
+}
+
+async function loadSettings() {
+  const resp = await new Promise((resolve) => {
+    try { API.runtime.sendMessage({ type: "GET_SETTINGS" }, (res) => resolve(res)); }
+    catch { resolve(null); }
+  });
+  if (!resp || resp.type !== "GET_SETTINGS_OK") return;
+  const s = resp.payload || {};
+
+  document.getElementById("strictMode").checked = !!s.strictMode;
+
+  document.getElementById("ek_card").checked   = s.enabledKinds?.card   !== false;
+  document.getElementById("ek_cvv").checked    = s.enabledKinds?.cvv    !== false;
+  document.getElementById("ek_expiry").checked = s.enabledKinds?.expiry !== false;
+  document.getElementById("ek_dni").checked    = s.enabledKinds?.dni    !== false;
+  document.getElementById("ek_cci").checked    = s.enabledKinds?.cci    !== false;
+
+  setStrictBlockKindsToUI(s.strictBlockKinds || ["card","cvv","expiry","cci"]);
+  document.getElementById("dniOnlyFinancial").checked = s.dniOnlyFinancial !== false;
+}
+
+async function saveSettings() {
+  const next = {
+    strictMode: document.getElementById("strictMode").checked,
+    enabledKinds: {
+      card:   document.getElementById("ek_card").checked,
+      cvv:    document.getElementById("ek_cvv").checked,
+      expiry: document.getElementById("ek_expiry").checked,
+      dni:    document.getElementById("ek_dni").checked,
+      cci:    document.getElementById("ek_cci").checked
+    },
+    strictBlockKinds: getStrictBlockKindsFromUI(),
+    dniOnlyFinancial: document.getElementById("dniOnlyFinancial").checked
+  };
+
+  const res = await new Promise((resolve) => {
+    try { API.runtime.sendMessage({ type: "SET_SETTINGS", payload: next }, (r) => resolve(r)); }
+    catch { resolve(null); }
+  });
+
+  const msg = document.getElementById("settingsMsg");
+  msg.textContent = (res && res.type === "SET_SETTINGS_OK") ? "Guardado." : "Error al guardar.";
+  setTimeout(()=> msg.textContent = "", 1500);
+}
+
+async function resetSettings() {
+  const def = {
+    strictMode: false,
+    enabledKinds: { card:true, cvv:true, expiry:true, dni:true, cci:true },
+    strictBlockKinds: ["card","cvv","expiry","cci"],
+    dniOnlyFinancial: true
+  };
+  await storageSet(def);
+  await loadSettings();
+  const msg = document.getElementById("settingsMsg");
+  msg.textContent = "Restablecido.";
+  setTimeout(()=> msg.textContent = "", 1500);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  loadLists().catch(()=>{});
+  loadTrustLists().catch(()=>{});
+  loadSettings().catch(()=>{});
+
   document.getElementById("saveUserDomains").onclick = saveUserDomains;
   document.getElementById("clearUserDomains").onclick = clearUserDomains;
   document.getElementById("saveUserSuffixes").onclick = saveUserSuffixes;
   document.getElementById("clearUserSuffixes").onclick = clearUserSuffixes;
+
+  document.getElementById("saveSettings").onclick = saveSettings;
+  document.getElementById("resetSettings").onclick = resetSettings;
 });

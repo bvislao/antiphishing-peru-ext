@@ -1,40 +1,135 @@
 <!doctype html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <title>Anti-Phishing PE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 12px; width: 320px; }
-    .pill { display:inline-block; padding:4px 8px; border-radius:999px; font-weight:700; }
-    .low{ background:#e7f7e7; color:#116611; }
-    .mid{ background:#fff2cc; color:#7a4a00; }
-    .high{ background:#ffd6d6; color:#7a0000; }
-    ul{ padding-left: 18px; margin-top:8px; }
-    .muted{ color:#666; font-size:12px; }
-    button{ padding:6px 10px; border-radius:8px; border:1px solid #bbb; background:#fff; cursor:pointer; font-weight:600; }
-    .row{ display:flex; gap:8px; margin-top:8px; }
-    .footer { border-top: 1px solid #eee; margin-top: 12px; padding-top: 8px; font-size: 12px; color: #666; }
-    .footer a { color: inherit; text-decoration: underline; }
-    .footer .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .footer .cta { display:inline-flex; align-items:center; gap:6px; border:1px solid #f4c776; background:#fff8e7; color:#7a4a00; padding:6px 10px; border-radius:999px; font-weight:700; text-decoration:none; }
-    .footer .cta:hover { background:#fff2cc; }
+    :root{
+      --pri:#007b80; --pri-ink:#fff;
+      --ok-bg:#e8f7ef; --ok-ink:#0c5c41;
+      --mid-bg:#fff2cc; --mid-ink:#7a4a00;
+      --hi-bg:#ffd6d6; --hi-ink:#7a0000;
+      --muted:#6a7781; --ink:#1e242a; --bd:#e3e9f0;
+    }
+    *{ box-sizing:border-box }
+    body{
+      margin:0; width:340px; color:var(--ink);
+      font: 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:#fff;
+    }
+    header{
+      padding:12px 14px; border-bottom:1px solid var(--bd); display:flex; align-items:center; gap:10px;
+    }
+    .logo{ width:22px; height:22px; border-radius:6px; background:var(--pri); color:var(--pri-ink); display:grid; place-items:center; font-weight:800 }
+    .ttl{ font-weight:700; font-size:14px }
+    .riskbar{ height:4px; width:100%; }
+    .riskbar.low{ background:var(--ok-bg) }
+    .riskbar.mid{ background:var(--mid-bg) }
+    .riskbar.high{ background:var(--hi-bg) }
+
+    main{ padding:12px 14px }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .space{ height:10px }
+    .pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-weight:700; border:1px solid transparent }
+    .low{ background:var(--ok-bg); color:var(--ok-ink); border-color:#bfe9d5 }
+    .mid{ background:var(--mid-bg); color:var(--mid-ink); border-color:#f4c776 }
+    .high{ background:var(--hi-bg); color:var(--hi-ink); border-color:#e59a9a }
+
+    .dom{
+      padding:10px; border:1px solid var(--bd); border-radius:12px; display:flex; justify-content:space-between; align-items:center;
+    }
+    .dom b{ font-size:13px }
+    .muted{ color:var(--muted); font-size:12px }
+    ul{ margin:8px 0 0 0; padding-left:18px }
+
+    button, .btn{
+      border:1px solid var(--bd); background:#fff; color:var(--ink); padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:700; text-decoration:none;
+    }
+    button.primary{ background:var(--pri); color:var(--pri-ink); border-color:var(--pri) }
+    button.ghost{ background:#fff }
+    .btn.small{ padding:6px 9px; font-weight:600 }
+
+    .split{ display:flex; gap:8px; flex-wrap:wrap }
+    .card{ border:1px solid var(--bd); border-radius:12px; padding:10px }
+    .switch{ display:inline-flex; align-items:center; gap:8px }
+    .switch input{ width:36px; height:20px }
+
+    footer{
+      border-top:1px solid var(--bd); padding:10px 14px; display:flex; flex-direction:column; gap:8px;
+    }
+    .links{ display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap }
+    .cta{
+      display:inline-flex; align-items:center; gap:6px; border:1px solid #f4c776; background:#fff8e7;
+      color:#7a4a00; padding:6px 10px; border-radius:999px; font-weight:700; text-decoration:none;
+    }
+    .cta:hover{ background:#fff2cc }
+    .spinner{ width:14px; height:14px; border:2px solid #c9d6df; border-top-color:var(--pri); border-radius:50%; animation:sp 1s linear infinite }
+    @keyframes sp{ to{ transform:rotate(360deg) } }
+    .right{ margin-left:auto }
   </style>
 </head>
 <body>
-  <div id="status">Analizando…</div>
-  <div class="row">
-    <button id="openOptions">Editar lista & Modo estricto</button>
-    <button id="refresh">Reanalizar</button>
-  </div>
-  <p class="muted">Consejo: Verifica el dominio exacto antes de ingresar datos.</p>
+  <div class="riskbar low" id="riskbar"></div>
 
-  <footer class="footer">
-    <div class="row">
-      <div>© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener noreferrer">bvislao</a>. Todos los derechos reservados.</div>
+  <header>
+    <div class="logo">AP</div>
+    <div class="ttl">Anti-Phishing Perú</div>
+    <div class="right muted" id="miniHint"><span class="spinner"></span> Analizando…</div>
+  </header>
+
+  <main>
+    <div class="row" id="riskPillLine">
+      <span class="pill low" id="riskPill">BAJO</span>
+      <span class="muted" id="trustedFlag"></span>
+    </div>
+
+    <div class="space"></div>
+
+    <div class="dom">
       <div>
-        <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener noreferrer">☕ Invítame un café</a>
-        &nbsp;·&nbsp;
-        <a href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener noreferrer">Github</a>
+        <div class="muted">Dominio analizado</div>
+        <div><b id="etld1">—</b></div>
+      </div>
+      <div class="row">
+        <button class="btn small" id="trustToggle">Confiar</button>
+        <button class="btn small" id="refresh">Reanalizar</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div style="font-weight:700; margin-bottom:6px">Motivos principales</div>
+      <div id="reasonsWrap" class="muted">Sin señales relevantes.</div>
+    </div>
+
+    <div class="split" style="margin-top:10px">
+      <div class="card" style="flex:1 1 140px">
+        <div style="font-weight:700; margin-bottom:6px">Modo estricto</div>
+        <label class="switch">
+          <input type="checkbox" id="strictToggle" />
+          <span class="muted">Bloquear datos sensibles en sitios no confiables</span>
+        </label>
+        <div class="row" style="margin-top:8px">
+          <button class="btn small" id="openOptions">Opciones…</button>
+          <a class="btn small" href="https://github.com/bvislao/antiphishing-peru-ext#readme" target="_blank" rel="noopener">Ayuda</a>
+        </div>
+      </div>
+      <div class="card" style="flex:1 1 140px">
+        <div style="font-weight:700; margin-bottom:6px">Acciones rápidas</div>
+        <div class="row">
+          <a class="btn small" href="https://github.com/bvislao/antiphishing-peru-ext/issues/new" target="_blank" rel="noopener">Reportar sitio</a>
+          <a class="btn small" href="https://bvislao.me" target="_blank" rel="noopener">Web</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="links">
+      <div class="muted">© 2025 <a href="https://bvislao.me" target="_blank" rel="noopener">bvislao</a>. Todos los derechos reservados.</div>
+      <div class="row">
+        <a class="cta" href="https://www.buymeacoffee.com/bvislao" target="_blank" rel="noopener">☕ Invítame un café</a>
+        <a class="btn" href="https://github.com/bvislao/antiphishing-peru-ext" target="_blank" rel="noopener">Código fuente</a>
       </div>
     </div>
   </footer>

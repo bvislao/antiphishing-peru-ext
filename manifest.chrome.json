@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anti-Phishing Perú (Bancos & Financieras)",
   "description": "Detecta phishing bancario/financiero en Perú y alerta (banner, sonido, badge). Incluye Modo Estricto.",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "permissions": ["storage", "notifications"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Anti-Phishing PE", "default_popup": "popup.html" },
