@@ -34,12 +34,9 @@ La Extensión solicita ciertos permisos para poder cumplir con su única finalid
     * **Propósito:** Almacenar la lista de sitios de phishing conocidos y sitios legítimos (la base de datos de amenazas) en su dispositivo. También se usa para guardar sus configuraciones (ej. si las notificaciones están activadas).
     * **Privacidad:** Estos datos se guardan solo en su navegador.
 
-* **`webNavigation` y `host_permissions` (`<all_urls>`):**
+* **`host_permissions`:**
     * **Propósito:** Esencial para leer la URL de *todas* las pestañas que intenta visitar, *antes* de que la página cargue. Los sitios de phishing pueden estar en cualquier dominio, por lo que necesitamos este permiso amplio para detectar amenazas en tiempo real.
     * **Privacidad:** Como se mencionó, esta URL solo se lee localmente para comparación y nunca se transmite.
-
-* **`tabs`:**
-    * **Propósito:** Necesario para tomar medidas de protección, como redirigir al usuario desde una página de phishing peligrosa a una página de advertencia segura (alojada dentro de la extensión).
 
 * **`notifications`:**
     * **Propósito:** Mostrar una alerta nativa del sistema para notificarle inmediatamente que se ha detectado y bloqueado un sitio de phishing.
