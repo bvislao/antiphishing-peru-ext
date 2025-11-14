@@ -44,15 +44,19 @@ const notify = async ({ title, message }) => {
 
 // ---- Defaults (si whitelist.js no cargó) ----
 const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
-  "bcp.com.pe","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.pe",
-  "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe",
-  "cajaarequipa.pe","cajahuancayo.com.pe","cajapiura.pe","cajasullana.pe","cajatrujillo.pe",
+  "viabcp.com","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.com.pe","citibank.com","compartamos.com.pe","santander.com.pe",
+  "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe","bancom.pe","bancognb.com.pe","bancofalabella.pe","alfinbanco.pe","bankofchina.com",".bancobci.pe",
+  "cajaarequipa.pe","cajahuancayo.com.pe","cajapiura.pe","cajasullana.pe","cajatrujillo.com.pe","icbc.com.pe","santanderconsumer.com.pe",
+  "agrobanco.com.pe","cofide.com.pe","mivivienda.com.pe","confianza.pe","efectiva.com.pe","proempresa.com.pe","surgir.com.pe","mafperu.com","tarjetaoh.pe",
+  "qapaq.pe","cmac-cusco.com.pe","cajadelsanta.pe","cajaica.pe","cajamaynas.pe","cajapaita.pe","cmactacna.com.pe","cajametropolitana.com.pe","cajaincasur.com.pe",
+  "losandes.pe","prymera.pe","cajacentro.com.pe","tarjetacencosud.pe","alternativa.com.pe","volvofinancialservices.com","vivela.lat","santanderconsumer.com.pe","totalserviciosfinancieros.com.pe",
+  "jpmorgan.com",
   "google.com","microsoft.com","outlook.com","office.com","live.com","hotmail.com",
   "apple.com","icloud.com","yahoo.com",
   "github.com","gitlab.com","stackoverflow.com","atlassian.com","docker.com","slack.com","zoom.us",
   "linkedin.com","facebook.com","whatsapp.com","instagram.com","x.com",
   "tiktok.com","reddit.com","youtube.com","netflix.com","spotify.com",
-  "amazon.com","ebay.com","paypal.com","mercadolibre.com"
+  "amazon.com","ebay.com","paypal.com","mercadolibre.com","mercadolibre.com.pe"
 ];
 const DEFAULT_TRUSTED_SUFFIXES_FALLBACK = globalThis.DEFAULT_TRUSTED_SUFFIXES || ["gob.pe","edu.pe"];
 

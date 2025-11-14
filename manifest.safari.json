@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Anti-Phishing Perú",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Alerta sobre posibles páginas de phishing y protege tus datos (Perú y global).",
   "permissions": ["storage"],
   "background": {
