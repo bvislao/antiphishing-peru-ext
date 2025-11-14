@@ -60,7 +60,7 @@ que ciertas URLs pueden verificarse contra la API.
 
 ## 🔐 Permisos y privacidad
 
-**Permisos**: `storage`, `tabs`, `activeTab`, `webNavigation`, `notifications`, `host_permissions: <all_urls>`.  
+**Permisos**: `storage`, `notifications`.
 **Privacidad**:
 - El análisis es **local**; no recolectamos datos personales ni historial.
 - Si habilitas **Safe Browsing**, ciertas URLs se consultan contra la API de Google con fines de seguridad.
@@ -75,16 +75,6 @@ Incluye imágenes (p. ej. en `docs/`) y referencia aquí:
 - `docs/screenshot-options.png` — Options (lista + modo estricto)  
 - `docs/screenshot-banner.png` — Banner de alerta  
 - `docs/screenshot-pill.png` — Píldora “Desbloquear 60s”
-
----
-
-## 🛍️ Publicación en Chrome Web Store (resumen)
-
-1. Sube la versión a `manifest.json` (ej. `1.0.1`) y empaqueta en `.zip`.  
-2. En el **Developer Dashboard**: **New item → Chrome extension (MV3)** → sube el ZIP.  
-3. Completa el **Store listing** (título, descripciones, capturas, ícono 128×128).  
-4. Justifica permisos, completa **Data Safety** y enlaza tu **Privacy Policy** (si usas Safe Browsing).  
-5. **Publish** y atiende observaciones si las hubiera.
 
 ---
 
