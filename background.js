@@ -44,7 +44,7 @@ const notify = async ({ title, message }) => {
 
 // ---- Defaults (si whitelist.js no cargó) ----
 const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
-  "bcp.com.pe","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.pe",
+  "viabcp.com","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.pe",
   "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe",
   "cajaarequipa.pe","cajahuancayo.com.pe","cajapiura.pe","cajasullana.pe","cajatrujillo.pe",
   "google.com","microsoft.com","outlook.com","office.com","live.com","hotmail.com",
