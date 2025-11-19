@@ -42,8 +42,14 @@ const notify = async ({ title, message }) => {
   });
 };
 
-// ---- Defaults (si whitelist.js no cargó) ----
-const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
+// ===========================================================
+// Whitelist remota con fallback y caché en storage.sync
+// ===========================================================
+const REMOTE_WHITELIST_URL = "https://whitelist-antiphishing-pe.netlify.app/whitelist.json";
+const REMOTE_TTL_MS = 1 * 60 * 60 * 1000; //1hr
+
+// Fallback local si el remoto falla por cualquier motivo
+const DEFAULT_TRUSTED_ETLD1_FALLBACK = [
   "viabcp.com","interbank.pe","bbva.pe","scotiabank.com.pe","bn.com.pe","banbif.com.pe","citibank.com","compartamos.com.pe","santander.com.pe",
   "mibanco.com.pe","pichincha.pe","bancofalabella.pe","bancoripley.com.pe","bancom.pe","bancognb.com.pe","bancofalabella.pe","alfinbanco.pe","bankofchina.com",".bancobci.pe",
   "cajaarequipa.pe","cajahuancayo.com.pe","cajapiura.pe","cajasullana.pe","cajatrujillo.com.pe","icbc.com.pe","santanderconsumer.com.pe",
@@ -58,7 +64,50 @@ const DEFAULT_TRUSTED_ETLD1_FALLBACK = globalThis.DEFAULT_TRUSTED_ETLD1 || [
   "tiktok.com","reddit.com","youtube.com","netflix.com","spotify.com",
   "amazon.com","ebay.com","paypal.com","mercadolibre.com","mercadolibre.com.pe"
 ];
-const DEFAULT_TRUSTED_SUFFIXES_FALLBACK = globalThis.DEFAULT_TRUSTED_SUFFIXES || ["gob.pe","edu.pe"];
+const DEFAULT_TRUSTED_SUFFIXES_FALLBACK = ["gob.pe","edu.pe"];
+
+// Intenta traer la whitelist desde el remoto (acepta array o {domainsDefault:[]})
+async function fetchRemoteWhitelistOnce() {
+  try {
+    const resp = await fetch(REMOTE_WHITELIST_URL, { cache: "no-store" });
+    if (!resp.ok) throw new Error("Remote not ok");
+    const json = await resp.json();
+    let list = Array.isArray(json) ? json : (json?.domainsDefault || []);
+    list = list.map(s => String(s || "").toLowerCase().trim()).filter(Boolean);
+    return list.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
+// Obtiene lista base con caché (preferencia: remoto -> storage -> fallback)
+async function getRemoteOrCachedBaseDomains(force = false) {
+  const { trustedETLD1, trustedETLD1_ts } = await storageGet(["trustedETLD1", "trustedETLD1_ts"]);
+  const now = Date.now();
+
+  // Usa caché si existe y no está vencida
+  if (!force && Array.isArray(trustedETLD1) && trustedETLD1.length && typeof trustedETLD1_ts === "number" && (now - trustedETLD1_ts) < REMOTE_TTL_MS) {
+    return trustedETLD1;
+  }
+
+  // Refresca desde remoto
+  const remote = await fetchRemoteWhitelistOnce();
+  if (remote && remote.length) {
+    await storageSet({ trustedETLD1: remote, trustedETLD1_ts: now });
+    return remote;
+  }
+
+  // Si no hay remoto, usa lo que hubiera en caché; si no, fallback local
+  if (Array.isArray(trustedETLD1) && trustedETLD1.length) {
+    return trustedETLD1;
+  }
+  await storageSet({ trustedETLD1: DEFAULT_TRUSTED_ETLD1_FALLBACK, trustedETLD1_ts: now });
+  return DEFAULT_TRUSTED_ETLD1_FALLBACK;
+}
+
+// ===========================================================
+// Lógica existente (usando la lista base remota/caché/fallback)
+// ===========================================================
 
 // ---- SETTINGS por defecto ----
 const SETTINGS_DEFAULT = {
@@ -93,10 +142,7 @@ function levenshtein(a,b){
 
 // ---- Listas (base + usuario) ----
 async function getBaseDomains() {
-  const { trustedETLD1 } = await storageGet(["trustedETLD1"]);
-  if (Array.isArray(trustedETLD1) && trustedETLD1.length) return trustedETLD1;
-  await storageSet({ trustedETLD1: DEFAULT_TRUSTED_ETLD1_FALLBACK });
-  return DEFAULT_TRUSTED_ETLD1_FALLBACK;
+  return getRemoteOrCachedBaseDomains(false);
 }
 async function getBaseSuffixes() {
   const { trustedSuffixes } = await storageGet(["trustedSuffixes"]);
@@ -251,6 +297,7 @@ async function removeUserTrustedDomain(etld1) {
   return next;
 }
 
+// ---- Mensajería
 API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
@@ -287,6 +334,9 @@ API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else if (msg?.type === "SET_SETTINGS") {
         const settings = await setSettings(msg.payload || {});
         sendResponse({ type: "SET_SETTINGS_OK", payload: settings });
+      } else if (msg?.type === "REFRESH_REMOTE_WHITELIST") {
+        const base = await getRemoteOrCachedBaseDomains(true);
+        sendResponse({ type: "REFRESH_REMOTE_WHITELIST_OK", payload: { base } });
       }
     } catch (e) {
       sendResponse({ type: "ERROR", error: String(e) });
@@ -294,3 +344,7 @@ API.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   })();
   return true;
 });
+
+// ---- Refresco automático al instalar/arrancar
+try { API.runtime.onInstalled.addListener(() => { getRemoteOrCachedBaseDomains(true); }); } catch {}
+try { API.runtime.onStartup?.addListener(() => { getRemoteOrCachedBaseDomains(false); }); } catch {}
