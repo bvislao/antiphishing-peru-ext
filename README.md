@@ -74,23 +74,26 @@ Incluye imágenes (p. ej. en `docs/`) y referencia aquí:
 - `docs/screenshot-popup.png` — Popup con estado y razones  
 - `docs/screenshot-options.png` — Options (lista + modo estricto)  
 - `docs/screenshot-banner.png` — Banner de alerta  
-- `docs/screenshot-pill.png` — Píldora “Desbloquear 60s”
 
 ---
 
 ## 🤝 Contribuir
 
 1. Haz un fork y crea rama: `feat/mi-mejora`  
-2. Aplica cambios y prueba en `chrome://extensions`  
+2. Aplica cambios y prueba en `chrome://extensions` (renombrando manifest.chrome.json -> manifest.json ) 
 3. Abre un **Pull Request** con descripción + capturas
+4. Tienes una **Guia** mejor explicada <https://whitelist-antiphishing-pe.netlify.app/>
 
 **Roadmap**:
-- Lista negra remota firmada (JSON)
-- Heurística de homógrafos visuales mejorada
-- Reglas `declarativeNetRequest` para patrones de alto riesgo
-- Integraciones opcionales (PhishTank / OpenPhish)
-- Port a **Firefox MV3**
+- Lista blanca remota (JSON) ✅ DONE
+  Lista remota obtenida oficialmente de <https://whitelist-antiphishing-pe.netlify.app/whitelist.json>
+- Heurística de homógrafos visuales mejorada 🚧
+- Reglas `declarativeNetRequest` para patrones de alto riesgo 🚧
+- Integraciones opcionales (PhishTank / OpenPhish) : Funciona como una base de datos comunitaria donde los usuarios pueden reportar sitios web de phishing que han encontrado. 🚧
 
+
+🚧 : **Pendiente**
+✅ : **Implementado**
 ---
 
 ## 📄 Licencia
