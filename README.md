@@ -44,17 +44,11 @@ Muestra **alertas** en página (banner + sonido), marca el ícono con **badge** 
 
 ### Lista de dominios confiables (eTLD+1)
 Edita en **Options** (uno por línea):  
-ej.: `bcp.com.pe`, `bbva.pe`, `scotiabank.com.pe`, `interbank.pe`, `banbif.pe`, etc.
+ej.: `viabcp.com`, `bbva.pe`, `scotiabank.com.pe`, `interbank.pe`, `banbif.pe`, etc.
 
 ### Modo Estricto
 Activa/desactiva el bloqueo de inputs sensibles en dominios **no** oficiales y elige qué tipos bloquear:  
 `card`, `cvv`, `expiry`, `cci`, `dni`.  
-En página verás una **píldora** “Desbloquear 60s”.
-
-### Safe Browsing (opcional)
-El proyecto incluye un **stub** para consultar **Google Safe Browsing**.  
-Si decides habilitarlo, añade tu **API Key** y declara en tu **Política de Privacidad**
-que ciertas URLs pueden verificarse contra la API.
 
 ---
 
