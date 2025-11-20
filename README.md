@@ -22,10 +22,9 @@ Muestra **alertas** en página (banner + sonido), marca el ícono con **badge** 
   - Dominios **look-alike** (distancia a lista de oficiales)
   - Formularios que envían a **otro dominio** o **sin HTTPS**
   - **Campos sensibles** detectados por labels/patrones: **DNI**, **Tarjeta**, **CVV/CVC**, **Fecha de vencimiento**, **CCI**
-- 🛡️ **Modo Estricto**: bloquea inputs sensibles en dominios no oficiales; botón para **desbloquear 60s**
+- 🛡️ **Modo Estricto**: bloquea inputs sensibles en dominios no oficiales.
 - 🧰 **Lista blanca** editable (eTLD+1) para bancos/financieras del Perú
 - 🔔 **Alertas**: banner en la página, beep, badge en el action y notificación en riesgo **ALTO**
-- 🧪 Integración **opcional** con **Google Safe Browsing** (stub incluido)
 
 ---
 
@@ -86,8 +85,8 @@ Incluye imágenes (p. ej. en `docs/`) y referencia aquí:
 - Integraciones opcionales (PhishTank / OpenPhish) : Funciona como una base de datos comunitaria donde los usuarios pueden reportar sitios web de phishing que han encontrado. 🚧
 
 
-🚧 : **Pendiente**
-✅ : **Implementado**
+* 🚧 :**Pendiente**
+* ✅ :**Implementado**
 ---
 
 ## 📄 Licencia
